@@ -13,20 +13,36 @@ logger = get_logger(__name__)
 
 class RedisService:
     def __init__(self):
+        self.enabled = bool(settings.REDIS_ENABLED and settings.REDIS_URL)
         self.redis_url = settings.REDIS_URL or "redis://localhost:6379"
         self._timeout = settings.REDIS_OPERATION_TIMEOUT_SECONDS
         self._down_cooldown_seconds = 10.0
-        self.client = redis.from_url(
-            self.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT_SECONDS,
-            socket_timeout=settings.REDIS_SOCKET_TIMEOUT_SECONDS,
-            health_check_interval=30,
-            retry_on_timeout=True,
-        )
+        self.client = None
+        if self.enabled:
+            self.client = redis.from_url(
+                self.redis_url,
+                decode_responses=True,
+                socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT_SECONDS,
+                socket_timeout=settings.REDIS_SOCKET_TIMEOUT_SECONDS,
+                health_check_interval=30,
+                retry_on_timeout=True,
+            )
         self._is_available = True
         self._was_down_logged = False
         self._retry_after_monotonic = 0.0
+
+    @property
+    def status(self) -> str:
+        if not self.enabled:
+            return "disabled"
+        return "up" if self._is_available else "down"
+
+    async def health_status(self) -> str:
+        if not self.enabled:
+            return "disabled"
+        if self._should_skip():
+            return "down"
+        return "up" if await self.ping() else "down"
 
     def _mark_up(self) -> None:
         self._is_available = True
@@ -48,6 +64,8 @@ class RedisService:
         )
 
     async def ping(self) -> bool:
+        if not self.enabled or self.client is None:
+            return False
         try:
             await asyncio.wait_for(self.client.ping(), timeout=self._timeout)
             self._mark_up()
@@ -57,7 +75,7 @@ class RedisService:
             return False
 
     async def get_cache(self, key: str):
-        if self._should_skip():
+        if not self.enabled or self.client is None or self._should_skip():
             return None
         try:
             data = await asyncio.wait_for(self.client.get(key), timeout=self._timeout)
@@ -72,7 +90,7 @@ class RedisService:
             return None
 
     async def set_cache(self, key: str, value: Any, expire: int = 3600):
-        if self._should_skip():
+        if not self.enabled or self.client is None or self._should_skip():
             return
         try:
             await asyncio.wait_for(
@@ -85,7 +103,7 @@ class RedisService:
             self._mark_down(f"Failed to write cache key: {key}")
 
     async def delete_cache(self, key: str) -> None:
-        if self._should_skip():
+        if not self.enabled or self.client is None or self._should_skip():
             return
         try:
             await asyncio.wait_for(self.client.delete(key), timeout=self._timeout)
@@ -95,7 +113,7 @@ class RedisService:
             self._mark_down(f"Failed to delete cache key: {key}")
 
     async def delete_by_prefix(self, prefix: str, limit: int = 500) -> int:
-        if self._should_skip():
+        if not self.enabled or self.client is None or self._should_skip():
             return 0
         deleted = 0
         pattern = f"{prefix}*"
@@ -122,6 +140,8 @@ class RedisService:
         return deleted
 
     async def close(self):
+        if self.client is None:
+            return
         try:
             await self.client.aclose()
         except Exception:

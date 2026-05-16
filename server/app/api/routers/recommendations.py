@@ -1,7 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from app.ml.engine import RecommenderEngine
-from app.api.deps import get_current_user
+from app.auth.dependencies import get_current_user
 from app.models.user import User
 
 router = APIRouter(prefix="/recommendations", tags=["ML Recommendations"])

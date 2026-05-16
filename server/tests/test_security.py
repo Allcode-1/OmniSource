@@ -1,7 +1,7 @@
-from jose import jwt
-
-from app.core.config import settings
-from app.core.security import create_access_token, get_password_hash, verify_password
+from app.auth import utils as auth_utils
+from app.auth.tokens import create_access_token
+from app.auth.utils import hash_password as get_password_hash
+from app.auth.utils import validate_password as verify_password
 
 
 def test_password_hash_roundtrip() -> None:
@@ -15,7 +15,8 @@ def test_password_hash_roundtrip() -> None:
 
 def test_create_access_token_contains_subject_and_exp() -> None:
     token = create_access_token("user-123")
-    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    payload = auth_utils.decode_jwt(token)
 
     assert payload["sub"] == "user-123"
+    assert payload["type"] == "access"
     assert "exp" in payload

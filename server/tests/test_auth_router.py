@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.routers import auth as auth_router
+from app.auth import routes as auth_router
 
 
 class _FakeField:

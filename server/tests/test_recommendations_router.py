@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api import deps
+from app.auth import dependencies as deps
 from app.api.routers import recommendations as recommendations_router
 
 

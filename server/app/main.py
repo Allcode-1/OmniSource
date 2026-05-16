@@ -12,7 +12,8 @@ from app.core.redis import redis_client
 from app.core.logging import configure_logging, get_logger
 from app.core.metrics import metrics_registry
 from app.ml.vectorizer import get_vectorizer
-from app.api.routers import actions, auth, content, recommendations, research, user
+from app.auth import routes as auth
+from app.api.routers import actions, content, recommendations, research, user
 
 configure_logging()
 logger = get_logger(__name__)
@@ -39,8 +40,11 @@ async def startup_event() -> None:
     global _startup_warmup_task
     logger.info("Starting %s", settings.PROJECT_NAME)
     await init_db()
-    redis_ok = await redis_client.ping()
-    logger.info("Redis health: %s", "up" if redis_ok else "down")
+    if redis_client.enabled:
+        redis_ok = await redis_client.ping()
+        logger.info("Redis health: %s", "up" if redis_ok else "down")
+    else:
+        logger.info("Redis health: disabled")
     _startup_warmup_task = asyncio.create_task(_warmup_vectorizer())
 
 
@@ -182,7 +186,7 @@ async def health_check():
     return {
         "status": "ok",
         "project": settings.PROJECT_NAME,
-        "redis": "up" if await redis_client.ping() else "down",
+        "redis": await redis_client.health_status(),
     }
 
 

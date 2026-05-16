@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api import deps
+from app.auth import dependencies as deps
 from app.api.routers import content as content_router
 from app.schemas.content import UnifiedContent
 

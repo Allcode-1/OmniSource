@@ -1,9 +1,12 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str
     MONGODB_URL: str
     REDIS_URL: str | None = None
+    REDIS_ENABLED: bool = True
     REDIS_CONNECT_TIMEOUT_SECONDS: float = 2.0
     REDIS_SOCKET_TIMEOUT_SECONDS: float = 2.0
     REDIS_OPERATION_TIMEOUT_SECONDS: float = 2.5
@@ -18,9 +21,12 @@ class Settings(BaseSettings):
     IMAGE_PROXY_MAX_BYTES_PER_ITEM: int = 5 * 1024 * 1024
     IMAGE_PROXY_CACHE_MAX_TOTAL_BYTES: int = 64 * 1024 * 1024
     IMAGE_PROXY_MAX_REDIRECTS: int = 4
-    SECRET_KEY: str
-    ALGORITHM: str
+    AUTH_JWT_ALGORITHM: str = "RS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    AUTH_JWT_PRIVATE_KEY_PATH: Path = Path("certs/private.pem")
+    AUTH_JWT_PUBLIC_KEY_PATH: Path = Path("certs/public.pem")
+    AUTH_JWT_ALLOW_EPHEMERAL_KEYS: bool = True
     LOG_LEVEL: str = "INFO"
 
     CORS_ORIGINS: list[str] = [
@@ -53,6 +59,6 @@ class Settings(BaseSettings):
     SPOTIFY_CLIENT_SECRET: str
     GOOGLE_BOOKS_API_KEY: str
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

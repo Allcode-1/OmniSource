@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pymongo.errors import DuplicateKeyError
 
-from app.api import deps
+from app.auth import dependencies as deps
 from app.api.routers import user as user_router
 
 

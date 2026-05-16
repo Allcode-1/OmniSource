@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api import deps
+from app.auth import dependencies as deps
 from app.api.routers import actions as actions_router
 from app.schemas.content import UnifiedContent
 

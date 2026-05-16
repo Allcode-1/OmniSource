@@ -11,7 +11,7 @@ from app.core.logging import get_logger
 from app.core.redis import redis_client
 from app.services.content_service import ContentService
 from app.schemas.content import UnifiedContent
-from app.api.deps import get_optional_user
+from app.auth.dependencies import get_optional_user
 from app.models.user import User
 from app.ml.engine import RecommenderEngine
 

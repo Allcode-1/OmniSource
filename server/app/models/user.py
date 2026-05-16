@@ -10,6 +10,8 @@ class User(Document):
     is_onboarding_completed: bool = False
     ranking_variant: str = "hybrid_ml"
     token_version: int = 0
+    is_active: bool = True
+    role: str = "user"
 
     class Settings:
         name = "users"

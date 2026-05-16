@@ -2,7 +2,7 @@ import pytest
 from fastapi import HTTPException
 from jose import JWTError
 
-from app.api import deps
+from app.auth import dependencies as deps
 
 
 class _FakeUser:

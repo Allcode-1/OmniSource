@@ -31,6 +31,10 @@ class AuthRepositoryImpl implements AuthRepository {
       }
 
       await _storage.write(key: 'jwt_token', value: token);
+      final refreshToken = response.data['refresh_token']?.toString();
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await _storage.write(key: 'refresh_token', value: refreshToken);
+      }
       AppLogger.info('Login successful for $email', name: 'AuthRepository');
       return UserModel.fromJson(response.data['user']);
     } catch (e, st) {
@@ -58,6 +62,10 @@ class AuthRepositoryImpl implements AuthRepository {
       final token = response.data['access_token']?.toString();
       if (token != null && token.isNotEmpty) {
         await _storage.write(key: 'jwt_token', value: token);
+      }
+      final refreshToken = response.data['refresh_token']?.toString();
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await _storage.write(key: 'refresh_token', value: refreshToken);
       }
 
       AppLogger.info('Register successful for $email', name: 'AuthRepository');
@@ -198,6 +206,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> logout() async {
     try {
       await _storage.delete(key: 'jwt_token');
+      await _storage.delete(key: 'refresh_token');
       AppLogger.info('Logout successful', name: 'AuthRepository');
     } catch (e, st) {
       AppLogger.error(

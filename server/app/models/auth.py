@@ -11,3 +11,14 @@ class PasswordReset(Document):
 
     class Settings:
         name = "password_resets"
+
+
+class RefreshSession(Document):
+    jti: Annotated[str, Indexed(unique=True)]
+    user_id: Annotated[str, Indexed()]
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: Annotated[datetime, Indexed(expireAfterSeconds=0)]
+    revoked_at: datetime | None = None
+
+    class Settings:
+        name = "refresh_sessions"

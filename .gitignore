@@ -7,9 +7,11 @@
 *.key
 keys.json
 *.keystore
+server/certs/
 
 # Python / FastAPI
 __pycache__/
+server/.ruff_cache/
 *.py[cod]
 *$py.class
 .venv/

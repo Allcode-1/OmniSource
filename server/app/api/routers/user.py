@@ -10,7 +10,7 @@ from app.schemas.user import (
     UserRead,
     UserUpdate,
 )
-from app.api.deps import get_current_user
+from app.auth.dependencies import get_current_user
 from app.core.logging import get_logger
 
 router = APIRouter(prefix="/user", tags=["user"])
