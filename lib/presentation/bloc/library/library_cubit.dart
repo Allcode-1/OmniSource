@@ -11,6 +11,7 @@ class LibraryCubit extends Cubit<LibraryState> {
   static const Duration _freshWindow = Duration(seconds: 15);
   DateTime? _lastLoadedAt;
   Future<void>? _inflightLoad;
+  final Set<String> _pendingFavoriteToggles = {};
 
   LibraryCubit({
     required this.contentRepository,
@@ -144,22 +145,41 @@ class LibraryCubit extends Cubit<LibraryState> {
     }
   }
 
-  Future<void> toggleFavorite(UnifiedContent item) async {
+  Future<bool> toggleFavorite(UnifiedContent item) async {
+    final key = _contentKey(item);
+    if (_pendingFavoriteToggles.contains(key)) return false;
+
+    final currentState = state;
+    bool? rollbackToLiked;
+
+    if (currentState is LibraryLoaded) {
+      final wasLiked = _containsContent(currentState.favorites, item);
+      rollbackToLiked = wasLiked;
+      emit(_setFavoriteState(currentState, item, liked: !wasLiked));
+    }
+
+    _pendingFavoriteToggles.add(key);
     try {
       await contentRepository.toggleLike(item);
       AppLogger.info(
         'Favorite toggled: ${item.externalId}',
         name: 'LibraryCubit',
       );
+      return true;
     } catch (e, st) {
+      final latestState = state;
+      if (rollbackToLiked != null && latestState is LibraryLoaded) {
+        emit(_setFavoriteState(latestState, item, liked: rollbackToLiked));
+      }
       AppLogger.error(
         'Toggle favorite failed',
         error: e,
         stackTrace: st,
         name: 'LibraryCubit',
       );
+      return false;
     } finally {
-      await loadLibraryData(force: true, showLoader: false);
+      _pendingFavoriteToggles.remove(key);
     }
   }
 
@@ -231,5 +251,37 @@ class LibraryCubit extends Cubit<LibraryState> {
     final currentState = state;
     if (currentState is! LibraryLoaded) return const [];
     return currentState.playlistItemsById[playlistId] ?? const [];
+  }
+
+  LibraryLoaded _setFavoriteState(
+    LibraryLoaded source,
+    UnifiedContent item, {
+    required bool liked,
+  }) {
+    final existing = source.favorites;
+    final contains = _containsContent(existing, item);
+
+    if (liked && !contains) {
+      return source.copyWith(favorites: [item, ...existing]);
+    }
+    if (!liked && contains) {
+      return source.copyWith(
+        favorites: existing
+            .where((favorite) => _contentKey(favorite) != _contentKey(item))
+            .toList(),
+      );
+    }
+    return source;
+  }
+
+  bool _containsContent(List<UnifiedContent> items, UnifiedContent target) {
+    final targetKey = _contentKey(target);
+    return items.any((item) => _contentKey(item) == targetKey);
+  }
+
+  String _contentKey(UnifiedContent item) {
+    final externalId = item.externalId.trim();
+    if (externalId.isNotEmpty) return '${item.type}:$externalId';
+    return '${item.type}:${item.id}';
   }
 }

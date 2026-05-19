@@ -45,6 +45,7 @@ class FakeContentRepository implements ContentRepository {
   Object? trendingError;
   Object? recommendationsError;
   Object? homeDataError;
+  Object? toggleLikeError;
 
   int searchCalls = 0;
   int favoritesCalls = 0;
@@ -73,6 +74,7 @@ class FakeContentRepository implements ContentRepository {
   Future<void> toggleLike(UnifiedContent item) async {
     toggleLikeCalls++;
     lastToggledContent = item;
+    if (toggleLikeError != null) throw toggleLikeError!;
   }
 
   @override

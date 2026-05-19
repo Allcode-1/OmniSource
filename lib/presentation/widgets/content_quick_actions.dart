@@ -48,11 +48,15 @@ class ContentQuickActions {
                 title: isLiked ? 'Remove from favorites' : 'Add to favorites',
                 onTap: () async {
                   Navigator.pop(sheetContext);
-                  await cubit.toggleFavorite(item);
+                  final updated = await cubit.toggleFavorite(item);
                   if (!context.mounted) return;
                   _showSnack(
                     context,
-                    isLiked ? 'Removed from favorites' : 'Added to favorites',
+                    updated
+                        ? isLiked
+                              ? 'Removed from favorites'
+                              : 'Added to favorites'
+                        : 'Could not update favorites',
                   );
                 },
               ),
@@ -140,16 +144,14 @@ class ContentQuickActions {
                 ),
               ),
               ...loadedState.playlists.map((playlist) {
-                final count = loadedState.playlistItemsById[playlist.id]?.length ?? 0;
+                final count =
+                    loadedState.playlistItemsById[playlist.id]?.length ?? 0;
                 return ListTile(
                   title: Text(playlist.title),
                   subtitle: Text('$count items'),
                   trailing: const Icon(CupertinoIcons.add_circled),
                   onTap: () async {
-                    await cubit.addItemToPlaylist(
-                      playlist.id,
-                      item,
-                    );
+                    await cubit.addItemToPlaylist(playlist.id, item);
                     if (!context.mounted) return;
                     if (!playlistContext.mounted) return;
                     Navigator.pop(playlistContext);
@@ -180,10 +182,7 @@ class ContentQuickActions {
 
   static void _showSnack(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 }

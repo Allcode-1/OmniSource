@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 
 import '../../../domain/entities/unified_content.dart';
@@ -11,9 +12,9 @@ import '../../bloc/library/library_cubit.dart';
 import '../../bloc/library/library_state.dart';
 import '../../bloc/search/search_cubit.dart';
 import '../../bloc/search/search_state.dart';
+import '../../widgets/app_feedback.dart';
 import '../../widgets/user_avatar.dart';
 import '../profile/profile_screen.dart';
-import '../calendar/release_calendar_screen.dart';
 import 'search_grid_card.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -108,21 +109,17 @@ class _SearchScreenState extends State<SearchScreen> {
                     _buildSearchHistory(context, state),
 
                   if (state.isLoading)
-                    const SliverFillRemaining(
-                      child: Center(
-                        child: CupertinoActivityIndicator(
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                    )
+                    const OmniGridSkeletonSliver()
                   else if (state.errorMessage.isNotEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: Center(
-                        child: Text(
-                          state.errorMessage,
-                          style: const TextStyle(color: Color(0xFFFF7A7A)),
-                        ),
+                      child: OmniErrorState(
+                        message: state.errorMessage,
+                        onRetry: _searchController.text.trim().length < 2
+                            ? null
+                            : () => context.read<SearchCubit>().search(
+                                _searchController.text,
+                              ),
                       ),
                     )
                   else if (filtered.isEmpty)
@@ -199,39 +196,19 @@ class _SearchScreenState extends State<SearchScreen> {
                       height: 1.12,
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => Navigator.push(
-                          context,
-                          CupertinoPageRoute(
-                            builder: (_) => const ReleaseCalendarScreen(),
-                          ),
+                  UserAvatar(
+                    username: username,
+                    size: 38,
+                    onTap: () {
+                      final userRepository = context.read<UserRepository>();
+                      Navigator.push(
+                        context,
+                        CupertinoPageRoute(
+                          builder: (_) =>
+                              ProfileScreen(userRepository: userRepository),
                         ),
-                        child: const SizedBox(
-                          width: 38,
-                          height: 38,
-                          child: Icon(CupertinoIcons.calendar_today, size: 22),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      UserAvatar(
-                        username: username,
-                        size: 38,
-                        onTap: () {
-                          final userRepository = context.read<UserRepository>();
-                          Navigator.push(
-                            context,
-                            CupertinoPageRoute(
-                              builder: (_) =>
-                                  ProfileScreen(userRepository: userRepository),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -445,16 +422,14 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildEmptyState(bool isInitial) {
     return SliverFillRemaining(
       hasScrollBody: false,
-      child: Center(
-        child: Text(
-          isInitial
-              ? "Find your next favorite"
-              : "Nothing found for active filters",
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.42),
-            fontSize: 15,
-          ),
-        ),
+      child: OmniEmptyState(
+        icon: isInitial
+            ? PhosphorIcons.magnifyingGlass(PhosphorIconsStyle.light)
+            : PhosphorIcons.slidersHorizontal(PhosphorIconsStyle.light),
+        title: isInitial ? 'Find your next favorite' : 'No matches found',
+        subtitle: isInitial
+            ? 'Search across movies, music, and books.'
+            : 'Try another query or switch the content type.',
       ),
     );
   }

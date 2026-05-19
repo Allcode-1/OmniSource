@@ -108,7 +108,7 @@ void main() {
       expect(cubit.getPlaylistItems('missing'), isEmpty);
     });
 
-    test('toggleFavorite calls content repository and reloads', () async {
+    test('toggleFavorite updates favorites optimistically', () async {
       await cubit.loadLibraryData();
       final item = makeContent(
         id: 'x',
@@ -121,9 +121,30 @@ void main() {
       await cubit.toggleFavorite(item);
 
       expect(contentRepository.toggleLikeCalls, 1);
+      expect(contentRepository.favoritesCalls, initialFavoritesCalls);
+      expect(cubit.state, isA<LibraryLoaded>());
+      final state = cubit.state as LibraryLoaded;
+      expect(state.favorites.first.externalId, 'ext-x');
+    });
+
+    test('toggleFavorite rolls back optimistic update on failure', () async {
+      await cubit.loadLibraryData();
+      contentRepository.toggleLikeError = Exception('network');
+      final item = makeContent(
+        id: 'x',
+        externalId: 'ext-x',
+        type: 'movie',
+        title: 'X',
+      );
+
+      await cubit.toggleFavorite(item);
+
+      expect(contentRepository.toggleLikeCalls, 1);
+      expect(cubit.state, isA<LibraryLoaded>());
+      final state = cubit.state as LibraryLoaded;
       expect(
-        contentRepository.favoritesCalls,
-        greaterThan(initialFavoritesCalls),
+        state.favorites.any((favorite) => favorite.externalId == 'ext-x'),
+        isFalse,
       );
     });
 

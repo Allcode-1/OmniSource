@@ -105,7 +105,7 @@ async def test_get_unified_search_ignores_task_errors(monkeypatch) -> None:
 async def test_get_home_data_returns_cached(monkeypatch) -> None:
     service = ContentService()
     fake_redis = _FakeRedis()
-    fake_redis.storage["home_data_v3_all"] = {
+    fake_redis.storage["home_data_v4_all"] = {
         "Trending Now": [_make_item("m1", "movie", 7.0).model_dump(by_alias=True)],
     }
     monkeypatch.setattr(content_service_module, "redis_client", fake_redis)
@@ -144,6 +144,38 @@ async def test_get_home_data_builds_filtered_sections(monkeypatch) -> None:
     assert payload
     assert all(item.type == "movie" for section in payload.values() for item in section)
     assert fake_redis.set_calls
+
+
+@pytest.mark.asyncio
+async def test_get_home_data_uses_music_fallback_when_spotify_empty(monkeypatch) -> None:
+    service = ContentService()
+    fake_redis = _FakeRedis()
+    monkeypatch.setattr(content_service_module, "redis_client", fake_redis)
+
+    async def empty_movies(*args, **kwargs):
+        return {"results": []}
+
+    async def empty_books(*args, **kwargs):
+        return {"items": []}
+
+    async def empty_music(*args, **kwargs):
+        return {"tracks": {"items": []}}
+
+    monkeypatch.setattr(service.tmdb, "get_popular_movies", empty_movies)
+    monkeypatch.setattr(service.tmdb, "get_top_rated_movies", empty_movies)
+    monkeypatch.setattr(service.tmdb, "search_movies", empty_movies)
+    monkeypatch.setattr(service.books, "search_books", empty_books)
+    monkeypatch.setattr(service.spotify, "search_tracks", empty_music)
+
+    payload = await service.get_home_data("music")
+
+    assert payload
+    assert all(item.type == "music" for section in payload.values() for item in section)
+    assert any(
+        item.external_id.startswith("fallback-")
+        for section in payload.values()
+        for item in section
+    )
 
 
 @pytest.mark.asyncio
@@ -214,6 +246,26 @@ async def test_get_recommendations_all_combines_sources(monkeypatch) -> None:
     payload = await service.get_recommendations("all")
     assert len(payload) >= 6
     assert fake_redis.set_calls
+
+
+@pytest.mark.asyncio
+async def test_get_recommendations_music_uses_fallback_when_spotify_empty(
+    monkeypatch,
+) -> None:
+    service = ContentService()
+    fake_redis = _FakeRedis()
+    monkeypatch.setattr(content_service_module, "redis_client", fake_redis)
+
+    async def empty_tracks(*args, **kwargs):
+        return {"tracks": {"items": []}}
+
+    monkeypatch.setattr(service.spotify, "search_tracks", empty_tracks)
+
+    payload = await service.get_recommendations("music")
+
+    assert payload
+    assert all(item.type == "music" for item in payload)
+    assert payload[0].external_id.startswith("fallback-")
 
 
 @pytest.mark.asyncio

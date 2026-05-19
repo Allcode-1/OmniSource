@@ -56,7 +56,13 @@ class AuthCubit extends Cubit<AuthState> {
   }
 
   Future<void> completeOnboarding(List<String> tags) async {
-    emit(AuthLoading());
+    final previous = state;
+    if (previous is AuthAuthenticated) {
+      emit(AuthOnboardingSaving(user: previous.user));
+    } else {
+      emit(AuthLoading());
+    }
+
     try {
       AppLogger.info('Onboarding completion started', name: 'AuthCubit');
       await authRepository.completeOnboarding(tags);
@@ -64,7 +70,12 @@ class AuthCubit extends Cubit<AuthState> {
       if (user != null) {
         emit(AuthAuthenticated(user: user, needsOnboarding: false));
       } else {
-        emit(AuthError("Session expired. Please login again."));
+        const message = "Session expired. Please login again.";
+        if (previous is AuthAuthenticated) {
+          emit(AuthOnboardingFailure(user: previous.user, message: message));
+        } else {
+          emit(AuthError(message));
+        }
       }
     } catch (e, st) {
       AppLogger.error(
@@ -73,7 +84,12 @@ class AuthCubit extends Cubit<AuthState> {
         stackTrace: st,
         name: 'AuthCubit',
       );
-      emit(AuthError("Failed to save your preferences."));
+      const message = "Failed to save your preferences.";
+      if (previous is AuthAuthenticated) {
+        emit(AuthOnboardingFailure(user: previous.user, message: message));
+      } else {
+        emit(AuthError(message));
+      }
     }
   }
 

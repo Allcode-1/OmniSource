@@ -115,7 +115,7 @@ class OmniSourceApp extends StatelessWidget {
       },
       home: BlocListener<AuthCubit, AuthState>(
         listener: (context, state) {
-          if (state is AuthAuthenticated) {
+          if (state is AuthAuthenticated && !state.needsOnboarding) {
             context.read<LibraryCubit>().loadLibraryData();
           }
         },

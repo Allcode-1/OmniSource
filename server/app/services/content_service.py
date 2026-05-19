@@ -14,6 +14,81 @@ from app.core.metrics import metrics_registry
 logger = get_logger(__name__)
 _T = TypeVar("_T")
 
+_MUSIC_FALLBACK_ITEMS = [
+    {
+        "_id": "music_fallback_night_drive",
+        "ext_id": "fallback-night-drive",
+        "type": "music",
+        "title": "Night Drive",
+        "subtitle": "OmniSource Picks",
+        "description": "Fallback music pick for empty Spotify responses.",
+        "image_url": "https://placehold.co/600x600/111827/FAF0F0/png?text=Night+Drive",
+        "rating": 8.6,
+        "genres": ["synth", "night", "pop"],
+        "release_date": "2026-01-01",
+    },
+    {
+        "_id": "music_fallback_pulse_radio",
+        "ext_id": "fallback-pulse-radio",
+        "type": "music",
+        "title": "Pulse Radio",
+        "subtitle": "OmniSource Picks",
+        "description": "Fallback music pick for empty Spotify responses.",
+        "image_url": "https://placehold.co/600x600/0F766E/FAF0F0/png?text=Pulse+Radio",
+        "rating": 8.2,
+        "genres": ["pop", "dance"],
+        "release_date": "2026-01-08",
+    },
+    {
+        "_id": "music_fallback_velvet_skyline",
+        "ext_id": "fallback-velvet-skyline",
+        "type": "music",
+        "title": "Velvet Skyline",
+        "subtitle": "OmniSource Picks",
+        "description": "Fallback music pick for empty Spotify responses.",
+        "image_url": "https://placehold.co/600x600/7C2D12/FAF0F0/png?text=Velvet+Skyline",
+        "rating": 8.0,
+        "genres": ["chill", "pop"],
+        "release_date": "2026-01-15",
+    },
+    {
+        "_id": "music_fallback_future_static",
+        "ext_id": "fallback-future-static",
+        "type": "music",
+        "title": "Future Static",
+        "subtitle": "OmniSource Picks",
+        "description": "Fallback music pick for empty Spotify responses.",
+        "image_url": "https://placehold.co/600x600/1D4ED8/FAF0F0/png?text=Future+Static",
+        "rating": 7.9,
+        "genres": ["electronic", "rock"],
+        "release_date": "2026-02-01",
+    },
+    {
+        "_id": "music_fallback_soft_focus",
+        "ext_id": "fallback-soft-focus",
+        "type": "music",
+        "title": "Soft Focus",
+        "subtitle": "OmniSource Picks",
+        "description": "Fallback music pick for empty Spotify responses.",
+        "image_url": "https://placehold.co/600x600/831843/FAF0F0/png?text=Soft+Focus",
+        "rating": 7.8,
+        "genres": ["chill", "ambient"],
+        "release_date": "2026-02-10",
+    },
+    {
+        "_id": "music_fallback_golden_hour",
+        "ext_id": "fallback-golden-hour",
+        "type": "music",
+        "title": "Golden Hour",
+        "subtitle": "OmniSource Picks",
+        "description": "Fallback music pick for empty Spotify responses.",
+        "image_url": "https://placehold.co/600x600/A16207/100E0E/png?text=Golden+Hour",
+        "rating": 7.7,
+        "genres": ["pop", "warm"],
+        "release_date": "2026-02-17",
+    },
+]
+
 class ContentService:
     def __init__(self):
         self.tmdb = TMDBClient()
@@ -41,6 +116,24 @@ class ContentService:
             source,
             type(exc).__name__,
         )
+
+    def _fallback_music(self, query: str = "", limit: int = 6) -> list[UnifiedContent]:
+        normalized_query = query.lower().strip()
+        items = [
+            UnifiedContent.model_validate(item)
+            for item in _MUSIC_FALLBACK_ITEMS
+        ]
+        if normalized_query:
+            def score(item: UnifiedContent) -> int:
+                haystack = " ".join(
+                    [item.title, item.subtitle or "", *item.genres],
+                ).lower()
+                return sum(1 for token in normalized_query.split() if token in haystack)
+
+            ranked = sorted(items, key=lambda item: score(item), reverse=True)
+            if score(ranked[0]) > 0:
+                items = ranked
+        return items[:limit]
 
     async def _run_dedup(
         self,
@@ -144,7 +237,7 @@ class ContentService:
         return await self._run_dedup(cache_key, self._inflight_search, _build)
 
     async def get_home_data(self, type: str = "all") -> Dict[str, List[UnifiedContent]]:
-        cache_key = f"home_data_v3_{type}"
+        cache_key = f"home_data_v4_{type}"
         cached = await redis_client.get_cache(cache_key)
         if cached:
             return {k: [UnifiedContent(**i) for i in v] for k, v in cached.items()}
@@ -164,7 +257,7 @@ class ContentService:
 
             raw_res = await asyncio.gather(*tasks, return_exceptions=True)
 
-            def wrap(data, mapper_func, type_key):
+            def wrap(data, mapper_func, type_key, fallback_query: str = ""):
                 if type != "all" and type_key != type:
                     return []
                 if isinstance(data, Exception):
@@ -202,23 +295,25 @@ class ContentService:
                     except Exception as exc:
                         self._record_error("home_map_unexpected", type_key, exc)
                         continue
+                if type_key == "music" and not mapped:
+                    return self._fallback_music(fallback_query, limit=15)
                 return mapped[:15]
 
             result = {
                 "Trending Now": wrap(raw_res[0], self.mapper.map_tmdb, "movie")
-                + wrap(raw_res[3], self.mapper.map_spotify, "music")
+                + wrap(raw_res[3], self.mapper.map_spotify, "music", "new music")
                 + wrap(raw_res[6], self.mapper.map_google_books, "book"),
                 "Editor's Choice": wrap(raw_res[1], self.mapper.map_tmdb, "movie")
-                + wrap(raw_res[4], self.mapper.map_spotify, "music")
+                + wrap(raw_res[4], self.mapper.map_spotify, "music", "rock")
                 + wrap(raw_res[7], self.mapper.map_google_books, "book"),
-                "New Releases": wrap(raw_res[3], self.mapper.map_spotify, "music")
+                "New Releases": wrap(raw_res[3], self.mapper.map_spotify, "music", "new music")
                 + wrap(raw_res[0], self.mapper.map_tmdb, "movie"),
                 "Action & High Energy": wrap(raw_res[2], self.mapper.map_tmdb, "movie")
-                + wrap(raw_res[5], self.mapper.map_spotify, "music"),
+                + wrap(raw_res[5], self.mapper.map_spotify, "music", "pop"),
                 "Must Read Classics": wrap(raw_res[6], self.mapper.map_google_books, "book"),
                 "Discover Something New": wrap(raw_res[8], self.mapper.map_google_books, "book")
                 + wrap(raw_res[1], self.mapper.map_tmdb, "movie")
-                + wrap(raw_res[4], self.mapper.map_spotify, "music"),
+                + wrap(raw_res[4], self.mapper.map_spotify, "music", "rock"),
             }
 
             filtered = {key: value for key, value in result.items() if value}
@@ -290,7 +385,7 @@ class ContentService:
         return await self._run_dedup(cache_key, self._inflight_discovery, _build)
 
     async def get_recommendations(self, type: str = "all") -> List[UnifiedContent]:
-        cache_key = f"recs_v3_{type}"
+        cache_key = f"recs_v4_{type}"
         cached = await redis_client.get_cache(cache_key)
         if cached:
             return [UnifiedContent(**item) for item in cached]
@@ -332,6 +427,8 @@ class ContentService:
                 tracks = (raw or {}).get("tracks", {}) if isinstance(raw, dict) else {}
                 track_items = tracks.get("items", []) if isinstance(tracks, dict) else []
                 results = safe_map(track_items, self.mapper.map_spotify, "music")
+                if not results:
+                    results = self._fallback_music("pop", limit=10)
             elif type == "book":
                 try:
                     raw = await self.books.search_books("subject:recommended")
@@ -356,8 +453,13 @@ class ContentService:
                 if isinstance(s_raw, dict):
                     tracks = s_raw.get("tracks", {})
                     track_items = tracks.get("items", []) if isinstance(tracks, dict) else []
+                    music_results = safe_map(
+                        track_items[:5],
+                        self.mapper.map_spotify,
+                        "music",
+                    )
                     results.extend(
-                        safe_map(track_items[:5], self.mapper.map_spotify, "music"),
+                        music_results if music_results else self._fallback_music("pop", limit=5),
                     )
                 elif isinstance(s_raw, Exception):
                     self._record_error("recommendations_fetch", "music", s_raw)

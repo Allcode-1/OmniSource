@@ -1,11 +1,12 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../domain/entities/unified_content.dart';
 import '../../../domain/repositories/content_repository.dart';
 import '../../bloc/home/home_cubit.dart';
+import '../../widgets/app_feedback.dart';
 import '../../widgets/minimal_page_header.dart';
 import '../search/search_grid_card.dart';
 
@@ -119,17 +120,21 @@ class _TrendingHubScreenState extends State<TrendingHubScreen> {
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 22)),
             if (_isLoading && items.isEmpty)
-              const SliverFillRemaining(
-                child: Center(child: CupertinoActivityIndicator()),
+              const OmniGridSkeletonSliver(
+                padding: EdgeInsets.fromLTRB(24, 0, 24, 104),
               )
             else if (_error.isNotEmpty && items.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
-                child: Center(
-                  child: Text(
-                    _error,
-                    style: const TextStyle(color: Color(0xFFFF7A7A)),
-                  ),
+                child: OmniErrorState(message: _error, onRetry: () => _load()),
+              )
+            else if (items.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: OmniEmptyState(
+                  icon: PhosphorIcons.trendUp(PhosphorIconsStyle.light),
+                  title: 'Nothing trending yet',
+                  subtitle: 'Pull to refresh or switch the content type.',
                 ),
               )
             else

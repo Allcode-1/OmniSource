@@ -161,7 +161,11 @@ async def _invalidate_caches() -> None:
     await redis_client.delete_by_prefix("deep_research:")
     await redis_client.delete_by_prefix("user_recs:")
     await redis_client.delete_by_prefix("recs_v2_")
+    await redis_client.delete_by_prefix("recs_v3_")
+    await redis_client.delete_by_prefix("recs_v4_")
     await redis_client.delete_by_prefix("home_data_v2_")
+    await redis_client.delete_by_prefix("home_data_v3_")
+    await redis_client.delete_by_prefix("home_data_v4_")
 
 
 async def main(args: argparse.Namespace) -> None:

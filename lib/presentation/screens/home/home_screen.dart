@@ -14,8 +14,10 @@ import '../../bloc/auth/auth_state.dart';
 import '../../bloc/home/home_cubit.dart';
 import '../../bloc/library/library_cubit.dart';
 import '../../bloc/library/library_state.dart';
+import '../../widgets/app_feedback.dart';
 import '../../widgets/content_quick_actions.dart';
 import '../../widgets/user_avatar.dart';
+import '../calendar/release_calendar_screen.dart';
 import '../collections/collections_screen.dart';
 import '../profile/profile_screen.dart';
 import '../trending/trending_hub_screen.dart';
@@ -74,17 +76,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (state.isLoading &&
                     state.recommendations.isEmpty &&
                     state.trending.isEmpty)
-                  const SliverFillRemaining(
-                    child: Center(
-                      child: CupertinoActivityIndicator(color: _text),
-                    ),
-                  )
+                  const OmniHomeSkeletonSliver()
                 else if ((state.error ?? '').isNotEmpty &&
                     state.recommendations.isEmpty &&
                     state.trending.isEmpty)
                   SliverFillRemaining(
                     hasScrollBody: false,
-                    child: _ErrorState(
+                    child: OmniErrorState(
                       message: state.error ?? 'Failed to load content',
                       onRetry: () => context.read<HomeCubit>().loadContent(),
                     ),
@@ -94,6 +92,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     delegate: SliverChildListDelegate([
                       const SizedBox(height: 22),
                       _HeroRecommendation(item: hero, category: state.category),
+                      const SizedBox(height: 20),
+                      _ReleaseCalendarCard(
+                        onTap: () =>
+                            _push(context, const ReleaseCalendarScreen()),
+                      ),
                       const SizedBox(height: 26),
                       _ContentRail(
                         title: _forYouTitle(state.category),
@@ -288,6 +291,84 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static void _push(BuildContext context, Widget page) {
     Navigator.push(context, CupertinoPageRoute(builder: (_) => page));
+  }
+}
+
+class _ReleaseCalendarCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ReleaseCalendarCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: _HomeScreenState._horizontalPadding,
+      ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppTheme.surface.withValues(alpha: 0.82),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppTheme.ink.withValues(alpha: 0.08)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppTheme.ink.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  PhosphorIcons.calendarDots(PhosphorIconsStyle.regular),
+                  color: AppTheme.ink,
+                  size: 23,
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Release Calendar',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppTheme.ink,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Recent and upcoming drops',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppTheme.ink.withValues(alpha: 0.56),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                CupertinoIcons.chevron_right,
+                color: AppTheme.ink.withValues(alpha: 0.38),
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -827,34 +908,6 @@ class _TileFallback extends StatelessWidget {
         _fallbackIcon(type),
         color: AppTheme.ink.withValues(alpha: 0.32),
         size: 30,
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorState({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.ink.withValues(alpha: 0.7)),
-            ),
-            const SizedBox(height: 14),
-            TextButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
       ),
     );
   }

@@ -26,6 +26,7 @@ _ALLOWED_IMAGE_HOSTS = {
     "books.google.com",
     "books.googleusercontent.com",
     "lh3.googleusercontent.com",
+    "placehold.co",
 }
 _IMAGE_CACHE_TTL_SECONDS = settings.IMAGE_PROXY_CACHE_TTL_SECONDS
 _IMAGE_CACHE_MAX_ITEMS = settings.IMAGE_PROXY_CACHE_MAX_ITEMS

@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:omnisource/data/models/playlist_model.dart';
 import 'package:omnisource/domain/entities/unified_content.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../bloc/library/library_cubit.dart';
 import '../../bloc/library/library_state.dart';
+import '../../widgets/app_feedback.dart';
 import 'content_card.dart';
 import 'playlist_detail_screen.dart';
 import 'smart_library_screen.dart';
@@ -241,11 +243,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ),
                   if (state is LibraryLoading)
                     const SliverFillRemaining(
-                      child: Center(
-                        child: CupertinoActivityIndicator(
-                          color: AppTheme.primary,
-                        ),
-                      ),
+                      child: OmniLoadingState(message: 'Loading library'),
                     )
                   else if (state is LibraryLoaded) ...[
                     SliverPadding(
@@ -285,31 +283,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         ),
                       ),
                     ),
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      sliver: SliverGrid(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              mainAxisSpacing: 15,
-                              crossAxisSpacing: 15,
-                              childAspectRatio: 0.7,
-                            ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) =>
-                              ContentCard(item: state.favorites[index]),
-                          childCount: state.favorites.length,
+                    if (state.favorites.isEmpty)
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 230,
+                          child: OmniEmptyState(
+                            icon: PhosphorIcons.heart(PhosphorIconsStyle.light),
+                            title: 'No favorites yet',
+                            subtitle:
+                                'Liked movies, songs, and books will appear here.',
+                          ),
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        sliver: SliverGrid(
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 15,
+                                crossAxisSpacing: 15,
+                                childAspectRatio: 0.7,
+                              ),
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) =>
+                                ContentCard(item: state.favorites[index]),
+                            childCount: state.favorites.length,
+                          ),
                         ),
                       ),
-                    ),
                   ] else if (state is LibraryError)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: Center(
-                        child: Text(
-                          state.message,
-                          style: const TextStyle(color: Color(0xFFFF7A7A)),
-                        ),
+                      child: OmniErrorState(
+                        message: state.message,
+                        onRetry: () => context
+                            .read<LibraryCubit>()
+                            .loadLibraryData(force: true),
                       ),
                     ),
                   const SliverToBoxAdapter(child: SizedBox(height: 110)),
