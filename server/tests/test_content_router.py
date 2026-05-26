@@ -77,7 +77,11 @@ def test_recommendations_uses_cache_hit_for_hybrid_ml(monkeypatch) -> None:
 
     monkeypatch.setattr(content_router.redis_client, "get_cache", fake_get_cache)
     monkeypatch.setattr(content_router.redis_client, "set_cache", fake_set_cache)
-    monkeypatch.setattr(content_router.ml_engine, "get_recommendations", fail_if_called)
+    monkeypatch.setattr(
+        content_router.ml_engine,
+        "get_recommendation_results",
+        fail_if_called,
+    )
 
     app = _build_app()
     app.dependency_overrides[deps.get_optional_user] = lambda: SimpleNamespace(
@@ -100,9 +104,9 @@ def test_recommendations_cache_miss_uses_ml_and_sets_cache(monkeypatch) -> None:
         return None
 
     async def fake_ml_recommendations(*args, **kwargs):
-        return [SimpleNamespace()]
+        return [(SimpleNamespace(), "Because you liked action movies")]
 
-    def fake_to_unified_content(item):
+    def fake_to_unified_content(item, reason=None):
         return _item(id_value="2", ext_id="ml", title="ML item", rating=7.7)
 
     async def fake_set_cache(key: str, value, expire: int = 0):
@@ -116,7 +120,9 @@ def test_recommendations_cache_miss_uses_ml_and_sets_cache(monkeypatch) -> None:
     monkeypatch.setattr(content_router.redis_client, "get_cache", fake_get_cache)
     monkeypatch.setattr(content_router.redis_client, "set_cache", fake_set_cache)
     monkeypatch.setattr(
-        content_router.ml_engine, "get_recommendations", fake_ml_recommendations
+        content_router.ml_engine,
+        "get_recommendation_results",
+        fake_ml_recommendations,
     )
     monkeypatch.setattr(content_router.ml_engine, "_to_unified_content", fake_to_unified_content)
     monkeypatch.setattr(content_router.service, "get_recommendations", fail_service_fallback)
@@ -150,7 +156,9 @@ def test_recommendations_falls_back_to_content_service_when_ml_empty(monkeypatch
 
     monkeypatch.setattr(content_router.redis_client, "get_cache", fake_get_cache)
     monkeypatch.setattr(
-        content_router.ml_engine, "get_recommendations", fake_ml_recommendations
+        content_router.ml_engine,
+        "get_recommendation_results",
+        fake_ml_recommendations,
     )
     monkeypatch.setattr(
         content_router.service, "get_recommendations", fake_service_recommendations

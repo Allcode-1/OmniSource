@@ -10,6 +10,9 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 class ContentVectorizer:
+    HASH_DIM = 128
+    HASH_MODEL_NAME = "hash:blake2b-128"
+
     def __init__(self, model_name: str = 'paraphrase-multilingual-MiniLM-L12-v2'):
         self.model_name = model_name
         self.device = "cpu"
@@ -46,8 +49,20 @@ class ContentVectorizer:
                     exc,
                 )
 
+    def use_hash_fallback(self) -> None:
+        self.model = None
+        self._load_failed = True
+
+    @property
+    def active_model_name(self) -> str:
+        if self.model is None and self._load_failed:
+            return self.HASH_MODEL_NAME
+        if self.model is None:
+            return f"{self.model_name}:pending"
+        return self.model_name
+
     @staticmethod
-    def _hash_embedding(text: str, dim: int = 128) -> List[float]:
+    def _hash_embedding(text: str, dim: int = HASH_DIM) -> List[float]:
         vec = np.zeros(dim, dtype=float)
         if not text:
             return vec.tolist()

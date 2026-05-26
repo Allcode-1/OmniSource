@@ -49,21 +49,27 @@ class _FakeMetaDoc:
         type: str,
         title: str,
         subtitle: str | None = None,
+        description: str | None = None,
         image_url: str | None = None,
         rating: float = 0.0,
         release_date: str | None = None,
         genres=None,
         features_vector=None,
+        vector_dim: int | None = None,
+        vector_model: str | None = None,
     ) -> None:
         self.ext_id = ext_id
         self.type = type
         self.title = title
         self.subtitle = subtitle
+        self.description = description
         self.image_url = image_url
         self.rating = rating
         self.release_date = release_date
         self.genres = genres or []
         self.features_vector = features_vector or []
+        self.vector_dim = vector_dim
+        self.vector_model = vector_model
 
     async def insert(self) -> None:
         _FakeContentMetadata._docs[self.ext_id] = self
@@ -256,7 +262,11 @@ async def test_toggle_like_adds_metadata_and_like(monkeypatch) -> None:
     assert result["status"] == "added"
     assert "m1" in _FakeContentMetadata._docs
     assert len(_FakeInteraction._rows) == 1
-    assert fake_redis.deleted_prefixes == ["favorites:u1:", "playlist_details:u1:"]
+    assert fake_redis.deleted_prefixes == [
+        "favorites:u1:",
+        "user_recs:u1:",
+        "playlist_details:u1:",
+    ]
 
 
 @pytest.mark.asyncio

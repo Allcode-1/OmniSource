@@ -45,8 +45,9 @@ def test_search_home_discover_delegate_to_service(monkeypatch) -> None:
         assert type == "book"
         return {"Featured": [_item("b1", "Book 1", type_value="book")]}
 
-    async def fake_discover(tag: str):
+    async def fake_discover(tag: str, type: str = "all"):
         assert tag == "cyberpunk"
+        assert type == "all"
         return [_item("d1", "Discover")]
 
     monkeypatch.setattr(content_router.service, "get_unified_search", fake_search)

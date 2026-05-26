@@ -12,6 +12,7 @@ from app.core.redis import redis_client
 from app.core.logging import configure_logging, get_logger
 from app.core.metrics import metrics_registry
 from app.ml.vectorizer import get_vectorizer
+from app.models.content_meta import ContentMetadata
 from app.auth import routes as auth
 from app.api.routers import actions, content, recommendations, research, user
 
@@ -187,6 +188,49 @@ async def health_check():
         "status": "ok",
         "project": settings.PROJECT_NAME,
         "redis": await redis_client.health_status(),
+        "ml": {
+            "vector_index_enabled": settings.ML_VECTOR_INDEX_ENABLED,
+            "vector_index_max_items": settings.ML_VECTOR_INDEX_MAX_ITEMS,
+        },
+    }
+
+
+@app.get("/diagnostics")
+async def diagnostics():
+    total = await ContentMetadata.find().count()
+    vectorized = await ContentMetadata.find(
+        {"features_vector.0": {"$exists": True}},
+    ).count()
+    return {
+        "status": "ok",
+        "redis": await redis_client.health_status(),
+        "ml": {
+            "vector_index_enabled": settings.ML_VECTOR_INDEX_ENABLED,
+            "vector_index_ttl_seconds": settings.ML_VECTOR_INDEX_TTL_SECONDS,
+            "vector_index_max_items": settings.ML_VECTOR_INDEX_MAX_ITEMS,
+            "vector_search_multiplier": settings.ML_VECTOR_SEARCH_MULTIPLIER,
+            "event_weights": {
+                "view": settings.ML_EVENT_WEIGHT_VIEW,
+                "open_detail": settings.ML_EVENT_WEIGHT_OPEN_DETAIL,
+                "dwell_time": settings.ML_EVENT_WEIGHT_DWELL_TIME,
+                "like": settings.ML_EVENT_WEIGHT_LIKE,
+                "playlist_add": settings.ML_EVENT_WEIGHT_PLAYLIST_ADD,
+            },
+            "score_weights": {
+                "similarity": settings.ML_HYBRID_SIMILARITY_WEIGHT,
+                "rating": settings.ML_HYBRID_RATING_WEIGHT,
+                "genre": settings.ML_HYBRID_GENRE_WEIGHT,
+            },
+        },
+        "catalog": {
+            "total_documents": total,
+            "vectorized_documents": vectorized,
+            "vector_coverage": round(vectorized / total, 4) if total else 0.0,
+        },
+        "cache": {
+            "warmup_tag_limit": settings.CACHE_WARMUP_TAG_LIMIT,
+            "warmup_user_limit": settings.CACHE_WARMUP_USER_LIMIT,
+        },
     }
 
 

@@ -12,6 +12,7 @@ from app.schemas.user import (
 )
 from app.auth.dependencies import get_current_user
 from app.core.logging import get_logger
+from app.core.redis import redis_client
 
 router = APIRouter(prefix="/user", tags=["user"])
 logger = get_logger(__name__)
@@ -84,6 +85,7 @@ async def complete_onboarding(
     current_user.interests = data.interests
     current_user.is_onboarding_completed = True
     await current_user.save()
+    await redis_client.delete_by_prefix(f"user_recs:{current_user.id}:")
     logger.info("Onboarding completed user=%s interests=%s", current_user.id, len(data.interests))
     return current_user
 
@@ -105,6 +107,7 @@ async def update_ranking_variant(
 ):
     current_user.ranking_variant = payload.ranking_variant
     await current_user.save()
+    await redis_client.delete_by_prefix(f"user_recs:{current_user.id}:")
     logger.info(
         "Ranking variant updated user=%s variant=%s",
         current_user.id,

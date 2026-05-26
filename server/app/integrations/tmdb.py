@@ -57,16 +57,42 @@ class TMDBClient:
 
         return {"results": []}
 
-    async def search_movies(self, query: str) -> Dict[str, Any]:
+    async def search_movies(
+        self,
+        query: str,
+        page: int = 1,
+        year: int | None = None,
+    ) -> Dict[str, Any]:
         if not query:
             return {"results": []}
-        return await self._make_request("search/movie", {"query": query, "page": 1})
+        params: Dict[str, Any] = {"query": query, "page": max(1, page)}
+        if year is not None:
+            params["year"] = year
+        return await self._make_request("search/movie", params)
 
-    async def get_popular_movies(self) -> Dict[str, Any]:
-        return await self._make_request("trending/movie/day", {})
+    async def get_popular_movies(self, page: int = 1) -> Dict[str, Any]:
+        return await self._make_request("movie/popular", {"page": max(1, page)})
 
-    async def get_top_rated_movies(self) -> Dict[str, Any]:
-        return await self._make_request("movie/top_rated", {})
+    async def get_top_rated_movies(self, page: int = 1) -> Dict[str, Any]:
+        return await self._make_request("movie/top_rated", {"page": max(1, page)})
+
+    async def discover_movies(
+        self,
+        page: int = 1,
+        year: int | None = None,
+        genre_id: int | None = None,
+        sort_by: str = "popularity.desc",
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
+            "page": max(1, page),
+            "sort_by": sort_by,
+            "vote_count.gte": 50,
+        }
+        if year is not None:
+            params["primary_release_year"] = year
+        if genre_id is not None:
+            params["with_genres"] = genre_id
+        return await self._make_request("discover/movie", params)
 
     async def get_movie_details(self, movie_id: int) -> Dict[str, Any]:
         return await self._make_request(f"movie/{movie_id}", {})

@@ -2,7 +2,9 @@
 
 ## Scope
 
-This policy applies to Python dependencies in `server/requirements.txt`.
+This policy applies to Python dependencies in `server/pyproject.toml` and
+`server/uv.lock`. `server/requirements.txt` is kept only as a compatibility
+fallback for tools that still expect it.
 
 ## Rules
 
@@ -15,8 +17,8 @@ This policy applies to Python dependencies in `server/requirements.txt`.
    - `pip-audit` for known vulnerabilities,
    - `bandit` for static security analysis.
 4. Dependency updates must include test runs:
-   - `python -m ruff check .`
-   - `python -m pytest -q`
+   - `uv run ruff check .`
+   - `uv run pytest -q`
 5. For security exceptions:
    - open a tracking issue with risk assessment,
    - define an expiration date,

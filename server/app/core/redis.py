@@ -64,7 +64,7 @@ class RedisService:
         )
 
     async def ping(self) -> bool:
-        if not self.enabled or self.client is None:
+        if self.client is None:
             return False
         try:
             await asyncio.wait_for(self.client.ping(), timeout=self._timeout)
@@ -75,7 +75,7 @@ class RedisService:
             return False
 
     async def get_cache(self, key: str):
-        if not self.enabled or self.client is None or self._should_skip():
+        if self.client is None or self._should_skip():
             return None
         try:
             data = await asyncio.wait_for(self.client.get(key), timeout=self._timeout)
@@ -90,7 +90,7 @@ class RedisService:
             return None
 
     async def set_cache(self, key: str, value: Any, expire: int = 3600):
-        if not self.enabled or self.client is None or self._should_skip():
+        if self.client is None or self._should_skip():
             return
         try:
             await asyncio.wait_for(
@@ -103,7 +103,7 @@ class RedisService:
             self._mark_down(f"Failed to write cache key: {key}")
 
     async def delete_cache(self, key: str) -> None:
-        if not self.enabled or self.client is None or self._should_skip():
+        if self.client is None or self._should_skip():
             return
         try:
             await asyncio.wait_for(self.client.delete(key), timeout=self._timeout)
@@ -112,8 +112,8 @@ class RedisService:
         except Exception:
             self._mark_down(f"Failed to delete cache key: {key}")
 
-    async def delete_by_prefix(self, prefix: str, limit: int = 500) -> int:
-        if not self.enabled or self.client is None or self._should_skip():
+    async def delete_by_prefix(self, prefix: str, limit: int | None = None) -> int:
+        if self.client is None or self._should_skip():
             return 0
         deleted = 0
         pattern = f"{prefix}*"
@@ -130,7 +130,7 @@ class RedisService:
                         timeout=self._timeout,
                     )
                     deleted += len(keys)
-                if cursor == 0 or deleted >= limit:
+                if cursor == 0 or (limit is not None and deleted >= limit):
                     break
             self._mark_up()
             if deleted:

@@ -1,8 +1,14 @@
 import asyncio
 from typing import List, Dict, Any, Awaitable, Callable, TypeVar
+from pymongo.errors import DuplicateKeyError
+
+from app.core.content_keys import make_content_key
 from app.integrations.tmdb import TMDBClient
 from app.integrations.google_books import GoogleBooksClient
 from app.integrations.spotify import SpotifyClient
+from app.ml.vector_index import vector_index
+from app.ml.vectorizer import get_vectorizer
+from app.models.content_meta import ContentMetadata
 from app.utils.mappers import ContentMapper
 from app.utils.sanitizer import ContentSanitizer
 from app.schemas.content import UnifiedContent
@@ -100,6 +106,7 @@ class ContentService:
         self._inflight_home: dict[str, asyncio.Task[dict[str, list[UnifiedContent]]]] = {}
         self._inflight_discovery: dict[str, asyncio.Task[list[UnifiedContent]]] = {}
         self._inflight_recommendations: dict[str, asyncio.Task[list[UnifiedContent]]] = {}
+        self._background_tasks: set[asyncio.Task] = set()
 
     def _record_error(self, stage: str, source: str, exc: Exception) -> None:
         metrics_registry.increment_app_event(
@@ -150,6 +157,110 @@ class ContentService:
         finally:
             if store.get(key) is task:
                 store.pop(key, None)
+
+    @staticmethod
+    def _embedding_text(item: UnifiedContent) -> str:
+        return " ".join(
+            [
+                item.title,
+                item.subtitle or "",
+                item.description or "",
+                " ".join(item.genres or []),
+                item.release_date or "",
+            ],
+        ).strip()
+
+    def _schedule_catalog_ingest(self, items: list[UnifiedContent]) -> None:
+        valid_items = [
+            item
+            for item in items
+            if item.external_id and item.type in {"movie", "music", "book"}
+        ]
+        if not valid_items:
+            return
+        task = asyncio.create_task(self._persist_catalog_items(valid_items))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _persist_catalog_items(self, items: list[UnifiedContent]) -> None:
+        docs_to_vectorize: list[tuple[ContentMetadata, UnifiedContent]] = []
+        supports_content_key = hasattr(ContentMetadata, "content_key")
+        for item in items:
+            content_key = make_content_key(item.type, item.external_id)
+            doc = None
+            if supports_content_key and content_key:
+                doc = await ContentMetadata.find_one(
+                    ContentMetadata.content_key == content_key,
+                )
+            if doc is None:
+                doc = await ContentMetadata.find_one(
+                    ContentMetadata.ext_id == item.external_id,
+                    ContentMetadata.type == item.type,
+                )
+
+            if doc is None:
+                doc = ContentMetadata(
+                    content_key=content_key or None,
+                    ext_id=item.external_id,
+                    type=item.type,
+                    title=item.title,
+                    subtitle=item.subtitle,
+                    description=item.description,
+                    image_url=item.image_url,
+                    rating=item.rating or 0.0,
+                    release_date=item.release_date,
+                    genres=item.genres or [],
+                    features_vector=[],
+                )
+                try:
+                    await doc.insert()
+                except DuplicateKeyError:
+                    continue
+            else:
+                changed = False
+                for attr, value in (
+                    ("content_key", content_key or None),
+                    ("title", item.title),
+                    ("subtitle", item.subtitle),
+                    ("description", item.description),
+                    ("image_url", item.image_url),
+                    ("release_date", item.release_date),
+                ):
+                    if value and getattr(doc, attr, None) != value:
+                        setattr(doc, attr, value)
+                        changed = True
+                rating = item.rating or 0.0
+                if rating and doc.rating != rating:
+                    doc.rating = rating
+                    changed = True
+                if item.genres and doc.genres != item.genres:
+                    doc.genres = item.genres
+                    changed = True
+                if changed:
+                    await doc.save()
+
+            if doc is not None and not doc.features_vector:
+                docs_to_vectorize.append((doc, item))
+
+        if docs_to_vectorize:
+            vectorizer = get_vectorizer()
+            vectors = await asyncio.to_thread(
+                vectorizer.get_batch_embeddings,
+                [self._embedding_text(item) for _, item in docs_to_vectorize],
+            )
+            for (doc, _), vector in zip(docs_to_vectorize, vectors):
+                if not vector:
+                    continue
+                doc.features_vector = vector
+                doc.vector_dim = len(vector)
+                doc.vector_model = getattr(vectorizer, "active_model_name", "unknown")
+                await doc.save()
+            vector_index.invalidate()
+        logger.info(
+            "Catalog auto-ingest completed items=%s vectorized=%s",
+            len(items),
+            len(docs_to_vectorize),
+        )
 
     async def get_unified_search(self, query: str, type: str = "all") -> List[UnifiedContent]:
         cache_key = f"search:{type}:{query.lower().strip()}"
@@ -232,6 +343,7 @@ class ContentService:
                 [r.model_dump() for r in sorted_results],
                 expire=600,
             )
+            self._schedule_catalog_ingest(sorted_results)
             return sorted_results
 
         return await self._run_dedup(cache_key, self._inflight_search, _build)
@@ -243,22 +355,91 @@ class ContentService:
             return {k: [UnifiedContent(**i) for i in v] for k, v in cached.items()}
 
         async def _build() -> dict[str, list[UnifiedContent]]:
-            tasks = [
-                self.tmdb.get_popular_movies(),
-                self.tmdb.get_top_rated_movies(),
-                self.tmdb.search_movies("Action"),
-                self.spotify.search_tracks("new music"),
-                self.spotify.search_tracks("rock"),
-                self.spotify.search_tracks("pop"),
-                self.books.search_books("subject:fiction"),
-                self.books.search_books("subject:thriller"),
-                self.books.search_books("subject:history"),
-            ]
+            source_specs: dict[str, tuple[str, Callable[[], Awaitable[Any]], Callable[[Any], UnifiedContent], str]] = {
+                "movie_popular": (
+                    "movie",
+                    self.tmdb.get_popular_movies,
+                    self.mapper.map_tmdb,
+                    "",
+                ),
+                "movie_top": (
+                    "movie",
+                    self.tmdb.get_top_rated_movies,
+                    self.mapper.map_tmdb,
+                    "",
+                ),
+                "movie_action": (
+                    "movie",
+                    lambda: self.tmdb.search_movies("Action"),
+                    self.mapper.map_tmdb,
+                    "",
+                ),
+                "music_new": (
+                    "music",
+                    lambda: self.spotify.search_tracks("new music"),
+                    self.mapper.map_spotify,
+                    "new music",
+                ),
+                "music_rock": (
+                    "music",
+                    lambda: self.spotify.search_tracks("rock"),
+                    self.mapper.map_spotify,
+                    "rock",
+                ),
+                "music_pop": (
+                    "music",
+                    lambda: self.spotify.search_tracks("pop"),
+                    self.mapper.map_spotify,
+                    "pop",
+                ),
+                "book_fiction": (
+                    "book",
+                    lambda: self.books.search_books("subject:fiction"),
+                    self.mapper.map_google_books,
+                    "",
+                ),
+                "book_thriller": (
+                    "book",
+                    lambda: self.books.search_books("subject:thriller"),
+                    self.mapper.map_google_books,
+                    "",
+                ),
+                "book_history": (
+                    "book",
+                    lambda: self.books.search_books("subject:history"),
+                    self.mapper.map_google_books,
+                    "",
+                ),
+            }
 
-            raw_res = await asyncio.gather(*tasks, return_exceptions=True)
+            section_sources = {
+                "Trending Now": ["movie_popular", "music_new", "book_fiction"],
+                "Editor's Choice": ["movie_top", "music_rock", "book_thriller"],
+                "New Releases": ["music_new", "movie_popular"],
+                "Action & High Energy": ["movie_action", "music_pop"],
+                "Must Read Classics": ["book_fiction"],
+                "Discover Something New": ["book_history", "movie_top", "music_rock"],
+            }
+
+            needed_keys: list[str] = []
+            for keys in section_sources.values():
+                for key in keys:
+                    source_type = source_specs[key][0]
+                    if type != "all" and source_type != type:
+                        continue
+                    if key not in needed_keys:
+                        needed_keys.append(key)
+
+            raw_by_key: dict[str, Any] = {}
+            if needed_keys:
+                raw_res = await asyncio.gather(
+                    *(source_specs[key][1]() for key in needed_keys),
+                    return_exceptions=True,
+                )
+                raw_by_key = dict(zip(needed_keys, raw_res))
 
             def wrap(data, mapper_func, type_key, fallback_query: str = ""):
-                if type != "all" and type_key != type:
+                if data is None or (type != "all" and type_key != type):
                     return []
                 if isinstance(data, Exception):
                     self._record_error("home_fetch", type_key, data)
@@ -299,22 +480,20 @@ class ContentService:
                     return self._fallback_music(fallback_query, limit=15)
                 return mapped[:15]
 
-            result = {
-                "Trending Now": wrap(raw_res[0], self.mapper.map_tmdb, "movie")
-                + wrap(raw_res[3], self.mapper.map_spotify, "music", "new music")
-                + wrap(raw_res[6], self.mapper.map_google_books, "book"),
-                "Editor's Choice": wrap(raw_res[1], self.mapper.map_tmdb, "movie")
-                + wrap(raw_res[4], self.mapper.map_spotify, "music", "rock")
-                + wrap(raw_res[7], self.mapper.map_google_books, "book"),
-                "New Releases": wrap(raw_res[3], self.mapper.map_spotify, "music", "new music")
-                + wrap(raw_res[0], self.mapper.map_tmdb, "movie"),
-                "Action & High Energy": wrap(raw_res[2], self.mapper.map_tmdb, "movie")
-                + wrap(raw_res[5], self.mapper.map_spotify, "music", "pop"),
-                "Must Read Classics": wrap(raw_res[6], self.mapper.map_google_books, "book"),
-                "Discover Something New": wrap(raw_res[8], self.mapper.map_google_books, "book")
-                + wrap(raw_res[1], self.mapper.map_tmdb, "movie")
-                + wrap(raw_res[4], self.mapper.map_spotify, "music", "rock"),
-            }
+            result: dict[str, list[UnifiedContent]] = {}
+            for section, keys in section_sources.items():
+                section_items: list[UnifiedContent] = []
+                for key in keys:
+                    source_type, _, mapper_func, fallback_query = source_specs[key]
+                    section_items.extend(
+                        wrap(
+                            raw_by_key.get(key),
+                            mapper_func,
+                            source_type,
+                            fallback_query,
+                        ),
+                    )
+                result[section] = self.sanitizer.get_unique(section_items, limit=20)
 
             filtered = {key: value for key, value in result.items() if value}
             serializable = {key: [item.model_dump() for item in value] for key, value in filtered.items()}
@@ -323,23 +502,29 @@ class ContentService:
 
         return await self._run_dedup(cache_key, self._inflight_home, _build)
 
-    async def get_discovery(self, tag: str) -> List[UnifiedContent]:
-        cache_key = f"discovery:{tag.lower().strip()}"
+    async def get_discovery(self, tag: str, type: str = "all") -> List[UnifiedContent]:
+        cache_key = f"discovery:{type}:{tag.lower().strip()}"
         cached = await redis_client.get_cache(cache_key)
         if cached:
             return [UnifiedContent(**item) for item in cached]
 
         async def _build() -> list[UnifiedContent]:
             queries = get_tag_queries(tag)
-            tasks = [
-                self.tmdb.search_movies(queries.tmdb_keyword),
-                self.books.search_books(f"subject:{queries.google_books_subject}"),
-                self.spotify.search_tracks(f"genre:{queries.spotify_genre}"),
-            ]
+            fetchers: list[tuple[str, Awaitable[Any]]] = []
+            if type in ["all", "movie"]:
+                fetchers.append(("movie", self.tmdb.search_movies(queries.tmdb_keyword)))
+            if type in ["all", "book"]:
+                fetchers.append(("book", self.books.search_books(f"subject:{queries.google_books_subject}")))
+            if type in ["all", "music"]:
+                fetchers.append(("music", self.spotify.search_tracks(f"genre:{queries.spotify_genre}")))
+            if not fetchers:
+                return []
+
+            tasks = [fetcher for _, fetcher in fetchers]
             results_raw = await asyncio.gather(*tasks, return_exceptions=True)
             results = []
             for index, raw in enumerate(results_raw):
-                source = "movie" if index == 0 else "book" if index == 1 else "music"
+                source = fetchers[index][0]
                 if isinstance(raw, Exception):
                     self._record_error("discovery_fetch", source, raw)
                     continue
@@ -351,13 +536,13 @@ class ContentService:
                     )
                     continue
                 try:
-                    if index == 0:
+                    if source == "movie":
                         for item in raw.get("results", []):
                             results.append(self.mapper.map_tmdb(item))
-                    elif index == 1:
+                    elif source == "book":
                         for item in raw.get("items", []):
                             results.append(self.mapper.map_google_books(item))
-                    elif index == 2:
+                    elif source == "music":
                         tracks = raw.get("tracks")
                         items = tracks.get("items", []) if isinstance(tracks, dict) else []
                         for item in items:
@@ -380,6 +565,7 @@ class ContentService:
                 [item.model_dump() for item in unique_items],
                 expire=1200,
             )
+            self._schedule_catalog_ingest(unique_items)
             return unique_items
 
         return await self._run_dedup(cache_key, self._inflight_discovery, _build)
@@ -477,12 +663,17 @@ class ContentService:
                     [item.model_dump() for item in valid_results],
                     expire=600,
                 )
+                self._schedule_catalog_ingest(valid_results)
             return valid_results
 
         return await self._run_dedup(cache_key, self._inflight_recommendations, _build)
 
     async def close(self) -> None:
+        background_tasks = list(self._background_tasks)
+        for task in background_tasks:
+            task.cancel()
         await asyncio.gather(
+            *background_tasks,
             self.tmdb.close(),
             self.books.close(),
             self.spotify.close(),

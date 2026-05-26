@@ -7,6 +7,7 @@ from typing import Dict, List
 
 from pymongo.errors import DuplicateKeyError
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.content_keys import make_content_key
 from app.models.content_meta import ContentMetadata
@@ -28,14 +29,16 @@ def _utc_now() -> datetime:
 
 
 class AnalyticsService:
-    DEFAULT_WEIGHTS: Dict[str, float] = {
-        "view": 0.2,
-        "open_detail": 0.5,
-        "dwell_time": 0.3,
-        "search": 0.1,
-        "like": 1.0,
-        "playlist_add": 0.8,
-    }
+    @property
+    def default_weights(self) -> Dict[str, float]:
+        return {
+            "view": settings.ML_EVENT_WEIGHT_VIEW,
+            "open_detail": settings.ML_EVENT_WEIGHT_OPEN_DETAIL,
+            "dwell_time": settings.ML_EVENT_WEIGHT_DWELL_TIME,
+            "search": settings.ML_EVENT_WEIGHT_SEARCH,
+            "like": settings.ML_EVENT_WEIGHT_LIKE,
+            "playlist_add": settings.ML_EVENT_WEIGHT_PLAYLIST_ADD,
+        }
 
     async def track_event(
         self,
@@ -45,7 +48,7 @@ class AnalyticsService:
     ):
         weight = payload.weight
         if weight is None:
-            weight = self.DEFAULT_WEIGHTS.get(payload.type, 0.1)
+            weight = self.default_weights.get(payload.type, 0.1)
 
         if payload.ext_id and payload.ext_id != "app" and payload.content_type:
             try:
@@ -79,8 +82,9 @@ class AnalyticsService:
 
                 if doc is None:
                     embedding_text = f"{title} {payload.meta.get('description') or ''}"
+                    vectorizer = get_vectorizer()
                     vector = await asyncio.to_thread(
-                        get_vectorizer().get_embedding,
+                        vectorizer.get_embedding,
                         embedding_text,
                     )
                     try:
@@ -94,6 +98,14 @@ class AnalyticsService:
                             "genres": [str(item) for item in genres if item],
                             "release_date": release_date,
                             "features_vector": vector,
+                            "vector_dim": len(vector) if vector else None,
+                            "vector_model": getattr(
+                                vectorizer,
+                                "active_model_name",
+                                "unknown",
+                            )
+                            if vector
+                            else None,
                         }
                         if supports_content_key and content_key:
                             doc_payload["content_key"] = content_key

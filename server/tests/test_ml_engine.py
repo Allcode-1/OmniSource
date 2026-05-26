@@ -245,7 +245,7 @@ async def test_get_deep_research_falls_back_when_tag_vector_empty(monkeypatch) -
 
     monkeypatch.setattr(engine_module, "get_vectorizer", lambda: _FakeVectorizer([]))
 
-    async def fake_discovery(tag: str):
+    async def fake_discovery(tag: str, type: str = "all"):
         return [_content("d1"), _content("d2")]
 
     monkeypatch.setattr(engine.content_service, "get_discovery", fake_discovery)
@@ -272,7 +272,7 @@ async def test_get_deep_research_scores_candidates_and_merges_discovery(monkeypa
         lambda left, right: 1.0 if right == [1.0, 0.0] else -0.1,
     )
 
-    async def fake_discovery(tag: str):
+    async def fake_discovery(tag: str, type: str = "all"):
         return [_content("v1", "movie"), _content("extra", "movie")]
 
     monkeypatch.setattr(engine.content_service, "get_discovery", fake_discovery)
@@ -299,7 +299,7 @@ async def test_get_deep_research_skips_dimension_mismatch_vectors(monkeypatch) -
         lambda left, right: 1.0 if right == [1.0, 0.0] else -1.0,
     )
 
-    async def fake_discovery(tag: str):
+    async def fake_discovery(tag: str, type: str = "all"):
         return [_content("extra", "movie")]
 
     monkeypatch.setattr(engine.content_service, "get_discovery", fake_discovery)

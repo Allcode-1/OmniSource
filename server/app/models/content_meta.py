@@ -9,11 +9,14 @@ class ContentMetadata(Document):
     type: Annotated[str, Indexed()]  # movie, music, book
     title: str
     subtitle: Optional[str] = None
+    description: Optional[str] = None
     image_url: Optional[str] = None
     rating: float = 0.0
     release_date: Optional[str] = None
     genres: List[str] = Field(default_factory=list)
     features_vector: List[float] = Field(default_factory=list)
+    vector_dim: Optional[int] = None
+    vector_model: Optional[str] = None
 
     class Settings:
         name = "content_metadata"

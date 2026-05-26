@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.auth import dependencies as deps
 from app.api.routers import recommendations as recommendations_router
+from app.schemas.content import UnifiedContent
 
 
 def _build_app(current_user) -> FastAPI:
@@ -22,22 +23,38 @@ def test_get_my_recommendations_delegates_to_engine(monkeypatch) -> None:
         user_id: str,
         content_type: str = "all",
         limit: int = 10,
+        interest_tags=None,
     ):
         captured["user_id"] = user_id
         captured["content_type"] = content_type
         captured["limit"] = limit
-        return [{"id": "x1"}]
+        return [(SimpleNamespace(ext_id="x1"), "Because you liked movies")]
+
+    def fake_to_unified_content(item, reason=None):
+        return UnifiedContent(
+            id="movie_x1",
+            external_id=item.ext_id,
+            type="movie",
+            title="X1",
+            recommendation_reason=reason,
+        )
 
     monkeypatch.setattr(
         recommendations_router.engine,
-        "get_recommendations",
+        "get_recommendation_results",
         fake_get_recommendations,
+    )
+    monkeypatch.setattr(
+        recommendations_router.engine,
+        "_to_unified_content",
+        fake_to_unified_content,
     )
     client = TestClient(_build_app(current_user))
 
     response = client.get("/recommendations/?type=movie&limit=3")
     assert response.status_code == 200
-    assert response.json() == [{"id": "x1"}]
+    assert response.json()[0]["ext_id"] == "x1"
+    assert response.json()[0]["recommendation_reason"] == "Because you liked movies"
     assert captured == {
         "user_id": "u1",
         "content_type": "movie",
@@ -53,6 +70,7 @@ def test_get_my_recommendations_uses_defaults(monkeypatch) -> None:
         user_id: str,
         content_type: str = "all",
         limit: int = 10,
+        interest_tags=None,
     ):
         captured["user_id"] = user_id
         captured["content_type"] = content_type
@@ -61,7 +79,7 @@ def test_get_my_recommendations_uses_defaults(monkeypatch) -> None:
 
     monkeypatch.setattr(
         recommendations_router.engine,
-        "get_recommendations",
+        "get_recommendation_results",
         fake_get_recommendations,
     )
     client = TestClient(_build_app(current_user))

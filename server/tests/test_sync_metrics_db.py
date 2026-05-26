@@ -23,6 +23,7 @@ class _FakeContentDoc:
         type: str,
         title: str,
         subtitle=None,
+        description=None,
         image_url=None,
         rating: float = 0.0,
         release_date=None,
@@ -33,6 +34,7 @@ class _FakeContentDoc:
         self.type = type
         self.title = title
         self.subtitle = subtitle
+        self.description = description
         self.image_url = image_url
         self.rating = rating
         self.release_date = release_date

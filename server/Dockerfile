@@ -1,10 +1,13 @@
 FROM python:3.12-slim
 
+COPY --from=ghcr.io/astral-sh/uv:0.11.1 /uv /uvx /bin/
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     HF_HOME=/home/app/.cache/huggingface \
-    TRANSFORMERS_CACHE=/home/app/.cache/huggingface
+    TRANSFORMERS_CACHE=/home/app/.cache/huggingface \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
 WORKDIR /app
 
@@ -14,9 +17,8 @@ RUN apt-get update \
 
 RUN useradd --create-home --shell /bin/bash app
 
-COPY requirements.txt .
-RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . .
 
@@ -24,6 +26,8 @@ RUN mkdir -p /home/app/.cache/huggingface \
     && chown -R app:app /app /home/app
 
 USER app
+
+ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
 

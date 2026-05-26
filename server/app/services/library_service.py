@@ -33,7 +33,7 @@ class LibraryService:
             type=doc.type,
             title=doc.title,
             subtitle=doc.subtitle or doc.type.capitalize(),
-            description=None,
+            description=getattr(doc, "description", None),
             image_url=doc.image_url,
             rating=doc.rating or 0.0,
             genres=doc.genres or [],
@@ -108,8 +108,9 @@ class LibraryService:
         if meta is not None:
             return meta
 
+        vectorizer = get_vectorizer()
         vector = await asyncio.to_thread(
-            get_vectorizer().get_embedding,
+            vectorizer.get_embedding,
             f"{content.title} {content.description or ''}",
         )
         payload = {
@@ -117,11 +118,16 @@ class LibraryService:
             "type": content.type,
             "title": content.title,
             "subtitle": content.subtitle,
+            "description": content.description,
             "image_url": content.image_url,
             "rating": content.rating or 0.0,
             "release_date": content.release_date,
             "genres": content.genres or [],
             "features_vector": vector,
+            "vector_dim": len(vector) if vector else None,
+            "vector_model": getattr(vectorizer, "active_model_name", "unknown")
+            if vector
+            else None,
         }
         if supports_content_key and content_key:
             payload["content_key"] = content_key
@@ -150,6 +156,7 @@ class LibraryService:
         playlist_id: str | None = None,
     ) -> None:
         await redis_client.delete_by_prefix(f"favorites:{user_id}:")
+        await redis_client.delete_by_prefix(f"user_recs:{user_id}:")
         if playlist_id:
             await redis_client.delete_cache(
                 self._playlist_details_cache_key(user_id, playlist_id),

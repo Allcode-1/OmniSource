@@ -43,6 +43,7 @@ async def test_startup_event_runs_init_db_and_checks_redis(monkeypatch) -> None:
         return SimpleNamespace(done=lambda: True)
 
     monkeypatch.setattr(main_module, "init_db", fake_init_db)
+    monkeypatch.setattr(main_module.redis_client, "enabled", True)
     monkeypatch.setattr(main_module.redis_client, "ping", fake_ping)
     monkeypatch.setattr(main_module.asyncio, "create_task", fake_create_task)
 
@@ -146,6 +147,7 @@ async def test_health_and_metrics_endpoints(monkeypatch) -> None:
     async def fake_ping():
         return False
 
+    monkeypatch.setattr(main_module.redis_client, "enabled", True)
     monkeypatch.setattr(main_module.redis_client, "ping", fake_ping)
     monkeypatch.setattr(main_module.metrics_registry, "render_prometheus", lambda: "metric 1\n")
 
@@ -217,9 +219,9 @@ async def test_worker_warm_global_caches_and_run_once() -> None:
 
     await worker.warm_global_caches()
     assert captured["home"] == 4
-    assert captured["recs"] == 1
-    assert captured["discovery"] == 15
-    assert captured["deep"] == 15
+    assert captured["recs"] == 4
+    assert captured["discovery"] == worker_module.settings.CACHE_WARMUP_TAG_LIMIT
+    assert captured["deep"] == worker_module.settings.CACHE_WARMUP_TAG_LIMIT
 
     await worker.run_once()
     assert captured["sync"] == 1
@@ -249,10 +251,15 @@ async def test_worker_precompute_user_recommendations_sets_cache(monkeypatch) ->
         def model_dump(self):
             return {"ext_id": self.ext_id}
 
-    async def fake_recommendations(user_id: str, content_type: str = "all", limit: int = 20):
-        return [SimpleNamespace(external_id=f"{user_id}-item")]
+    async def fake_recommendations(
+        user_id: str,
+        content_type: str = "all",
+        limit: int = 20,
+        interest_tags=None,
+    ):
+        return [(SimpleNamespace(external_id=f"{user_id}-{content_type}-item"), "reason")]
 
-    def fake_to_unified(item):
+    def fake_to_unified(item, reason=None):
         return _FakeUnified(item.external_id)
 
     captured = {"cache_calls": 0}
@@ -261,12 +268,16 @@ async def test_worker_precompute_user_recommendations_sets_cache(monkeypatch) ->
         captured["cache_calls"] += 1
 
     monkeypatch.setattr(worker_module, "User", _FakeUserModel)
-    monkeypatch.setattr(worker.recommender, "get_recommendations", fake_recommendations)
+    monkeypatch.setattr(
+        worker.recommender,
+        "get_recommendation_results",
+        fake_recommendations,
+    )
     monkeypatch.setattr(worker.recommender, "_to_unified_content", fake_to_unified)
     monkeypatch.setattr(worker_module.redis_client, "set_cache", fake_set_cache)
 
     await worker.precompute_user_recommendations(limit=10)
-    assert captured["cache_calls"] == 2
+    assert captured["cache_calls"] == 8
 
 
 @pytest.mark.asyncio

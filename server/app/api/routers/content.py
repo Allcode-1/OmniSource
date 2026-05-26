@@ -162,8 +162,8 @@ async def home(type: str = Query("all")):
     return await service.get_home_data(type)
 
 @router.get("/discover", response_model=List[UnifiedContent])
-async def discover(tag: str = Query(...)):
-    return await service.get_discovery(tag)
+async def discover(tag: str = Query(...), type: str = Query("all")):
+    return await service.get_discovery(tag, type)
 
 
 @router.get("/image-proxy")
@@ -232,14 +232,16 @@ async def recommendations(
         if isinstance(cached, list) and cached:
             return [UnifiedContent(**item) for item in cached]
 
-        ml_items = await ml_engine.get_recommendations(
+        ml_items = await ml_engine.get_recommendation_results(
             str(current_user.id),
             content_type=type,
             limit=20,
+            interest_tags=getattr(current_user, "interests", []),
         )
         if ml_items:
             payload = [
-                ml_engine._to_unified_content(item).model_dump() for item in ml_items
+                ml_engine._to_unified_content(item, reason=reason).model_dump()
+                for item, reason in ml_items
             ]
             await redis_client.set_cache(cache_key, payload, expire=3600)
             return [UnifiedContent(**item) for item in payload]

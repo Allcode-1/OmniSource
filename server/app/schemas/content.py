@@ -14,6 +14,7 @@ class UnifiedContent(BaseModel):
     rating: Optional[float] = 0.0
     genres: List[str] = Field(default_factory=list)
     release_date: Optional[str] = None
+    recommendation_reason: Optional[str] = None
 
 
 class PlaylistUpdate(BaseModel):

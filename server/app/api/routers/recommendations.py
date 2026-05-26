@@ -13,8 +13,13 @@ async def get_my_recommendations(
     limit: int = Query(10, ge=1, le=50),
     current_user: User = Depends(get_current_user),
 ):
-    return await engine.get_recommendations(
+    results = await engine.get_recommendation_results(
         str(current_user.id),
         content_type=type,
         limit=limit,
+        interest_tags=getattr(current_user, "interests", []),
     )
+    return [
+        engine._to_unified_content(item, reason=reason)
+        for item, reason in results
+    ]

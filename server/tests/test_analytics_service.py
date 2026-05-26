@@ -31,6 +31,8 @@ class _FakeContentDoc:
         genres=None,
         release_date: str | None = None,
         features_vector=None,
+        vector_dim: int | None = None,
+        vector_model: str | None = None,
     ) -> None:
         self.ext_id = ext_id
         self.type = type
@@ -41,6 +43,8 @@ class _FakeContentDoc:
         self.genres = genres or []
         self.release_date = release_date
         self.features_vector = features_vector or []
+        self.vector_dim = vector_dim
+        self.vector_model = vector_model
         self.saved = False
 
     async def save(self) -> None:

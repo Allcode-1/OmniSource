@@ -8,6 +8,27 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+_MUSIC_QUERY_GENRES = {
+    "ambient",
+    "classical",
+    "country",
+    "dance",
+    "electronic",
+    "hip-hop",
+    "indie",
+    "jazz",
+    "k-pop",
+    "metal",
+    "pop",
+    "punk",
+    "r&b",
+    "rap",
+    "rock",
+    "soul",
+    "synthwave",
+}
+
+
 class SpotifyClient(BaseIntegration):
     def __init__(self):
         super().__init__("https://api.spotify.com/v1")
@@ -59,13 +80,93 @@ class SpotifyClient(BaseIntegration):
                 return
             await self._get_token()
 
-    async def search_tracks(self, query: str):
+    async def _get_artists(self, ids: list[str], headers: dict[str, str]) -> dict[str, dict]:
+        unique_ids = list(dict.fromkeys([artist_id for artist_id in ids if artist_id]))
+        if not unique_ids:
+            return {}
+
+        result: dict[str, dict] = {}
+        for index in range(0, len(unique_ids), 50):
+            chunk = unique_ids[index : index + 50]
+            payload = await self._get(
+                "/artists",
+                params={"ids": ",".join(chunk)},
+                headers=headers,
+            )
+            if not isinstance(payload, dict):
+                continue
+            for artist in payload.get("artists", []) or []:
+                if isinstance(artist, dict) and artist.get("id"):
+                    result[str(artist["id"])] = artist
+        return result
+
+    @staticmethod
+    def _query_genres(query: str) -> list[str]:
+        normalized = query.lower().replace("genre:", " ")
+        tokens = {
+            token.strip(" ,.;:/\\|()[]{}")
+            for token in normalized.replace("_", " ").split()
+        }
+        return sorted(token for token in tokens if token in _MUSIC_QUERY_GENRES)
+
+    async def _enrich_track_genres(
+        self,
+        payload: dict,
+        *,
+        query: str,
+        headers: dict[str, str],
+    ) -> dict:
+        tracks = payload.get("tracks")
+        items = tracks.get("items", []) if isinstance(tracks, dict) else []
+        if not items:
+            return payload
+
+        artist_ids: list[str] = []
+        for track in items:
+            if not isinstance(track, dict):
+                continue
+            for artist in track.get("artists", []) or []:
+                if isinstance(artist, dict) and artist.get("id"):
+                    artist_ids.append(str(artist["id"]))
+
+        artists_by_id = await self._get_artists(artist_ids, headers)
+        seed_genres = self._query_genres(query)
+        for track in items:
+            if not isinstance(track, dict):
+                continue
+            genres: list[str] = []
+            for artist in track.get("artists", []) or []:
+                artist_id = artist.get("id") if isinstance(artist, dict) else None
+                artist_payload = artists_by_id.get(str(artist_id))
+                if not artist_payload:
+                    continue
+                genres.extend(
+                    str(genre).strip().lower()
+                    for genre in artist_payload.get("genres", []) or []
+                    if str(genre).strip()
+                )
+            track["_artist_genres"] = list(dict.fromkeys(genres))[:8]
+            track["_seed_query_genres"] = seed_genres
+        return payload
+
+    async def search_tracks(
+        self,
+        query: str,
+        offset: int = 0,
+        limit: int = 20,
+    ):
         await self._ensure_token()
         if not self._access_token:
             return {"tracks": {"items": []}}
 
         headers = {"Authorization": f"Bearer {self._access_token}"}
-        params = {"q": query, "type": "track", "limit": 20, "market": "US"}
+        params = {
+            "q": query,
+            "type": "track",
+            "limit": max(1, min(limit, 50)),
+            "offset": max(0, offset),
+            "market": "US",
+        }
         res = await self._get("/search", params=params, headers=headers)
 
         # token may expire or request may fail transiently
@@ -75,4 +176,6 @@ class SpotifyClient(BaseIntegration):
                 return {"tracks": {"items": []}}
             headers = {"Authorization": f"Bearer {self._access_token}"}
             res = await self._get("/search", params=params, headers=headers)
-        return res or {"tracks": {"items": []}}
+        if isinstance(res, dict):
+            return await self._enrich_track_genres(res, query=query, headers=headers)
+        return {"tracks": {"items": []}}
