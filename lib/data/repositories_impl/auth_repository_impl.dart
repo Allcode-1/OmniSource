@@ -14,7 +14,6 @@ class AuthRepositoryImpl implements AuthRepository {
 
   AuthRepositoryImpl(this._dio);
 
-  // Вспомогательный метод для записи токенов
   Future<void> _writeToken(String key, String value) async {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
@@ -24,7 +23,6 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  // Вспомогательный метод для чтения токенов
   Future<String?> _readToken(String key) async {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
@@ -34,7 +32,6 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  // Вспомогательный метод для удаления токенов
   Future<void> _deleteToken(String key) async {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();

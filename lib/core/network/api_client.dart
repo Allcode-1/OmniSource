@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/app_logger.dart';
 import '../constants/api_constants.dart';
 
@@ -7,6 +9,32 @@ class ApiClient {
   late Dio dio;
   final _storage = const FlutterSecureStorage();
   Future<String?>? _refreshInFlight;
+
+  Future<String?> _readToken(String key) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(key);
+    }
+    return _storage.read(key: key);
+  }
+
+  Future<void> _writeToken(String key, String value) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, value);
+      return;
+    }
+    await _storage.write(key: key, value: value);
+  }
+
+  Future<void> _deleteToken(String key) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(key);
+      return;
+    }
+    await _storage.delete(key: key);
+  }
 
   ApiClient() {
     final normalizedBaseUrl = ApiConstants.baseUrl.endsWith('/')
@@ -25,8 +53,8 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token = await _storage.read(key: 'jwt_token');
-          if (token != null) {
+          final token = await _readToken('jwt_token');
+          if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
           options.extra['start_ms'] = DateTime.now().millisecondsSinceEpoch;
@@ -116,7 +144,7 @@ class ApiClient {
   }
 
   Future<String?> _performTokenRefresh() async {
-    final refreshToken = await _storage.read(key: 'refresh_token');
+    final refreshToken = await _readToken('refresh_token');
     if (refreshToken == null || refreshToken.isEmpty) return null;
 
     try {
@@ -136,15 +164,15 @@ class ApiClient {
       final newRefreshToken = response.data?['refresh_token']?.toString();
       if (accessToken == null || accessToken.isEmpty) return null;
 
-      await _storage.write(key: 'jwt_token', value: accessToken);
+      await _writeToken('jwt_token', accessToken);
       if (newRefreshToken != null && newRefreshToken.isNotEmpty) {
-        await _storage.write(key: 'refresh_token', value: newRefreshToken);
+        await _writeToken('refresh_token', newRefreshToken);
       }
       AppLogger.info('Access token refreshed', name: 'ApiClient');
       return accessToken;
     } catch (e, st) {
-      await _storage.delete(key: 'jwt_token');
-      await _storage.delete(key: 'refresh_token');
+      await _deleteToken('jwt_token');
+      await _deleteToken('refresh_token');
       AppLogger.error(
         'Token refresh failed; local session cleared',
         error: e,
