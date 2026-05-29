@@ -1,24 +1,74 @@
 services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: omnisource-nginx
+    init: true
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    environment:
+      NGINX_ENVSUBST_FILTER: "^OMNI_"
+      OMNI_FRONTEND_ORIGIN_REGEX: ${FRONTEND_ORIGIN_REGEX:-https?://(localhost|127\.0\.0\.1)(:[0-9]+)?}
+    volumes:
+      - ./nginx/templates/omnisource.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health >/dev/null 2>&1"]
+      interval: 20s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - omnisource-net
+
   api:
     build:
       context: ./server
       dockerfile: Dockerfile
+      args:
+        EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
     container_name: omnisource-api
     init: true
     env_file:
       - ./.env
     environment:
       PROJECT_NAME: ${PROJECT_NAME:-OmniSource}
-      MONGODB_URL: ${MONGODB_URL:-mongodb://mongo:27017/omnisource_db}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      MONGODB_URL: mongodb://mongo:27017/omnisource_db
+      REDIS_URL: redis://redis:6379/0
+      REDIS_ENABLED: ${REDIS_ENABLED:-true}
       REDIS_CONNECT_TIMEOUT_SECONDS: ${REDIS_CONNECT_TIMEOUT_SECONDS:-2.0}
       REDIS_SOCKET_TIMEOUT_SECONDS: ${REDIS_SOCKET_TIMEOUT_SECONDS:-2.0}
       REDIS_OPERATION_TIMEOUT_SECONDS: ${REDIS_OPERATION_TIMEOUT_SECONDS:-2.5}
       SLOW_REQUEST_THRESHOLD_MS: ${SLOW_REQUEST_THRESHOLD_MS:-2000.0}
-      SECRET_KEY: ${SECRET_KEY:-change_me_before_production}
-      ALGORITHM: ${ALGORITHM:-HS256}
-      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ML_VECTOR_INDEX_ENABLED: ${ML_VECTOR_INDEX_ENABLED:-true}
+      ML_VECTOR_INDEX_TTL_SECONDS: ${ML_VECTOR_INDEX_TTL_SECONDS:-600}
+      ML_VECTOR_INDEX_MAX_ITEMS: ${ML_VECTOR_INDEX_MAX_ITEMS:-0}
+      ML_VECTOR_BACKEND: ${ML_VECTOR_BACKEND:-hash}
+      ML_VECTOR_SEARCH_MULTIPLIER: ${ML_VECTOR_SEARCH_MULTIPLIER:-120}
+      ML_EVAL_HOLDOUT_MIN_POSITIVES: ${ML_EVAL_HOLDOUT_MIN_POSITIVES:-2}
+      ML_EVENT_WEIGHT_VIEW: ${ML_EVENT_WEIGHT_VIEW:-0.2}
+      ML_EVENT_WEIGHT_OPEN_DETAIL: ${ML_EVENT_WEIGHT_OPEN_DETAIL:-0.5}
+      ML_EVENT_WEIGHT_DWELL_TIME: ${ML_EVENT_WEIGHT_DWELL_TIME:-0.3}
+      ML_EVENT_WEIGHT_SEARCH: ${ML_EVENT_WEIGHT_SEARCH:-0.1}
+      ML_EVENT_WEIGHT_LIKE: ${ML_EVENT_WEIGHT_LIKE:-1.0}
+      ML_EVENT_WEIGHT_PLAYLIST_ADD: ${ML_EVENT_WEIGHT_PLAYLIST_ADD:-0.8}
+      ML_HYBRID_SIMILARITY_WEIGHT: ${ML_HYBRID_SIMILARITY_WEIGHT:-0.78}
+      ML_HYBRID_RATING_WEIGHT: ${ML_HYBRID_RATING_WEIGHT:-0.14}
+      ML_HYBRID_GENRE_WEIGHT: ${ML_HYBRID_GENRE_WEIGHT:-0.08}
+      ML_INTEREST_SIMILARITY_WEIGHT: ${ML_INTEREST_SIMILARITY_WEIGHT:-0.8}
+      ML_INTEREST_RATING_WEIGHT: ${ML_INTEREST_RATING_WEIGHT:-0.12}
+      ML_INTEREST_TAG_WEIGHT: ${ML_INTEREST_TAG_WEIGHT:-0.08}
+      CACHE_WARMUP_TAG_LIMIT: ${CACHE_WARMUP_TAG_LIMIT:-30}
+      CACHE_WARMUP_USER_LIMIT: ${CACHE_WARMUP_USER_LIMIT:-500}
+      AUTH_JWT_ALGORITHM: ${AUTH_JWT_ALGORITHM:-RS256}
+      AUTH_JWT_PRIVATE_KEY_PATH: ${AUTH_JWT_PRIVATE_KEY_PATH:-certs/private.pem}
+      AUTH_JWT_PUBLIC_KEY_PATH: ${AUTH_JWT_PUBLIC_KEY_PATH:-certs/public.pem}
+      AUTH_JWT_ALLOW_EPHEMERAL_KEYS: ${AUTH_JWT_ALLOW_EPHEMERAL_KEYS:-false}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
       AUTH_LOGIN_RATE_LIMIT_ATTEMPTS: ${AUTH_LOGIN_RATE_LIMIT_ATTEMPTS:-12}
       AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS:-300}
       AUTH_PASSWORD_RESET_RATE_LIMIT_ATTEMPTS: ${AUTH_PASSWORD_RESET_RATE_LIMIT_ATTEMPTS:-5}
@@ -37,20 +87,21 @@ services:
       SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-replace_me}
       SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-replace_me}
       GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-replace_me}
-    ports:
-      - "${API_PORT:-8000}:8000"
+    expose:
+      - "8000"
     volumes:
-      - hf_cache:/home/app/.cache/huggingface
+      - ./server/certs:/app/certs:ro
     depends_on:
       mongo:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)\""]
       interval: 20s
       timeout: 5s
-      retries: 5
+      start_period: 45s
+      retries: 8
     restart: unless-stopped
     networks:
       - omnisource-net
@@ -58,15 +109,17 @@ services:
   mongo:
     image: mongo:7
     container_name: omnisource-mongo
+    command: ["mongod", "--bind_ip_all"]
     ports:
       - "${MONGO_PORT:-27017}:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping').ok\" | grep 1"]
       interval: 20s
       timeout: 5s
-      retries: 5
+      start_period: 20s
+      retries: 10
     restart: unless-stopped
     networks:
       - omnisource-net
@@ -74,16 +127,17 @@ services:
   redis:
     image: redis:7-alpine
     container_name: omnisource-redis
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
-    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 20s
       timeout: 5s
-      retries: 5
+      start_period: 10s
+      retries: 10
     restart: unless-stopped
     networks:
       - omnisource-net
@@ -91,7 +145,7 @@ services:
 volumes:
   mongo_data:
   redis_data:
-  hf_cache:
 
 networks:
   omnisource-net:
+    driver: bridge
