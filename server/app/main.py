@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager, suppress
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
+from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
@@ -66,7 +67,13 @@ async def shutdown_event() -> None:
     logger.info("Shutdown completed")
 
 
-app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan, root_path="/api")
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    lifespan=lifespan,
+    root_path="/api",
+    docs_url="/docs",
+)
+
 
 app.add_middleware(
     CORSMiddleware,

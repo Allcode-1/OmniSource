@@ -14,16 +14,24 @@ class TMDBClient:
             "accept": "application/json",
             "Content-Type": "application/json"
         }
+
+        proxy = settings.SPOTIFY_PROXY_URL
+
+        if self.api_key and len(self.api_key) > 50:
+            self.headers["Authorization"] = f"Bearer {self.api_key}"
+
         self._client = httpx.AsyncClient(
+            proxy=proxy,
             timeout=httpx.Timeout(10.0, connect=3.0, read=10.0),
             limits=httpx.Limits(max_connections=30, max_keepalive_connections=15),
         )
 
     async def _make_request(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        default_params = {
-            "api_key": self.api_key,
-            "language": "en-US"
-        }
+        default_params = {"language": "en-US"}
+        
+        if self.api_key and len(self.api_key) <= 50:
+            default_params["api_key"] = self.api_key
+
         combined_params = {**default_params, **params}
         url = f"{self.base_url}/{endpoint}"
 

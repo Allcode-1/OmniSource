@@ -42,6 +42,11 @@ class ContentModel extends UnifiedContent {
   static String? _normalizeImageUrl(dynamic value) {
     final raw = _asString(value, fallback: '');
     if (raw.isEmpty) return null;
+    
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+    
     return ApiConstants.resolveImageUrl(raw);
   }
 

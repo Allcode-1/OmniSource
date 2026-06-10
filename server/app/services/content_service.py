@@ -117,12 +117,24 @@ class ContentService:
                 "error": type(exc).__name__,
             },
         )
-        logger.warning(
-            "Content service error stage=%s source=%s error=%s",
-            stage,
-            source,
-            type(exc).__name__,
-        )
+        
+        if hasattr(exc, "response") and exc.response is not None:
+            logger.error(
+                "TMDB HTTP Error Details -> stage=%s source=%s status=%s url=%s response_body=%s",
+                stage,
+                source,
+                exc.response.status_code,
+                exc.response.url,
+                exc.response.text,
+            )
+        else:
+            logger.warning(
+                "Content service error stage=%s source=%s error=%s message=%s",
+                stage,
+                source,
+                type(exc).__name__,
+                str(exc),
+            )      
 
     def _fallback_music(self, query: str = "", limit: int = 6) -> list[UnifiedContent]:
         normalized_query = query.lower().strip()

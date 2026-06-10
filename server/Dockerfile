@@ -20,10 +20,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --extra semantic --no-install-project
 
-RUN mkdir -p /opt/hf-cache \
-    && .venv/bin/python -c "from sentence_transformers import SentenceTransformer; import os; SentenceTransformer(os.environ['EMBEDDING_MODEL'], cache_folder=os.environ['HF_HOME'])"
+RUN UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu \
+    uv sync --frozen --no-dev --extra semantic --no-install-project \
+    && uv cache clean
+
+
+# RUN mkdir -p /opt/hf-cache \
+#     && .venv/bin/python -c "from sentence_transformers import SentenceTransformer; import os; SentenceTransformer(os.environ['EMBEDDING_MODEL'], cache_folder=os.environ['HF_HOME'])"
 
 
 FROM python:3.12-slim AS runtime
@@ -31,11 +35,7 @@ FROM python:3.12-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    HF_HOME=/opt/hf-cache \
-    SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache \
-    TRANSFORMERS_CACHE=/opt/hf-cache \
-    HF_HUB_OFFLINE=1 \
-    TRANSFORMERS_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=0 \
     TOKENIZERS_PARALLELISM=false \
     PATH="/app/.venv/bin:$PATH"
 
@@ -49,7 +49,9 @@ RUN apt-get update \
     && chown -R app:app /app /opt/hf-cache
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
-COPY --from=builder --chown=app:app /opt/hf-cache /opt/hf-cache
+
+RUN mkdir -p /opt/hf-cache && chown -R app:app /opt/hf-cache
+
 COPY --chown=app:app . .
 
 USER app

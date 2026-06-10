@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     TMDB_API_KEY: str
     SPOTIFY_CLIENT_ID: str
     SPOTIFY_CLIENT_SECRET: str
+    SPOTIFY_PROXY_URL: str | None = None
     GOOGLE_BOOKS_API_KEY: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

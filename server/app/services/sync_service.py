@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import Iterable
 
+from pymongo.errors import DuplicateKeyError
+
 from app.core.logging import get_logger
 from app.core.content_keys import make_content_key
 from app.ml.vectorizer import get_vectorizer
@@ -17,6 +19,47 @@ class ContentSyncService:
     def __init__(self):
         self.content_service = ContentService()
 
+    async def _find_existing_doc(
+        self,
+        *,
+        content_key: str | None,
+        ext_id: str,
+        content_type: str,
+        supports_content_key: bool,
+    ) -> ContentMetadata | None:
+        if supports_content_key and content_key:
+            doc = await ContentMetadata.find_one(
+                ContentMetadata.content_key == content_key,
+            )
+            if doc is not None:
+                return doc
+
+        if hasattr(ContentMetadata, "type"):
+            return await ContentMetadata.find_one(
+                ContentMetadata.ext_id == ext_id,
+                ContentMetadata.type == content_type,
+            )
+
+        return await ContentMetadata.find_one(ContentMetadata.ext_id == ext_id)
+
+    @staticmethod
+    def _apply_item_to_doc(
+        doc: ContentMetadata,
+        item: UnifiedContent,
+        content_key: str | None,
+        supports_content_key: bool,
+    ) -> None:
+        if supports_content_key and hasattr(doc, "content_key"):
+            doc.content_key = content_key
+        doc.type = item.type
+        doc.title = item.title
+        doc.subtitle = item.subtitle
+        doc.description = item.description
+        doc.image_url = item.image_url
+        doc.rating = item.rating or 0.0
+        doc.release_date = item.release_date
+        doc.genres = item.genres
+
     async def persist_items(self, items: Iterable[UnifiedContent]) -> int:
         item_list = list(items)
         count = 0
@@ -27,32 +70,15 @@ class ContentSyncService:
                 continue
 
             content_key = make_content_key(item.type, item.external_id)
-            doc = None
-            if supports_content_key:
-                doc = await ContentMetadata.find_one(
-                    ContentMetadata.content_key == content_key,
-                )
-            if doc is None:
-                if hasattr(ContentMetadata, "type"):
-                    doc = await ContentMetadata.find_one(
-                        ContentMetadata.ext_id == item.external_id,
-                        ContentMetadata.type == item.type,
-                    )
-                else:
-                    doc = await ContentMetadata.find_one(
-                        ContentMetadata.ext_id == item.external_id,
-                    )
+            doc = await self._find_existing_doc(
+                content_key=content_key,
+                ext_id=item.external_id,
+                content_type=item.type,
+                supports_content_key=supports_content_key,
+            )
+
             if doc:
-                if supports_content_key and hasattr(doc, "content_key"):
-                    doc.content_key = content_key
-                doc.type = item.type
-                doc.title = item.title
-                doc.subtitle = item.subtitle
-                doc.description = item.description
-                doc.image_url = item.image_url
-                doc.rating = item.rating or 0.0
-                doc.release_date = item.release_date
-                doc.genres = item.genres
+                self._apply_item_to_doc(doc, item, content_key, supports_content_key)
                 await doc.save()
             else:
                 payload = {
@@ -70,7 +96,24 @@ class ContentSyncService:
                 if supports_content_key:
                     payload["content_key"] = content_key
                 doc = ContentMetadata(**payload)
-                await doc.insert()
+                try:
+                    await doc.insert()
+                except DuplicateKeyError:
+                    doc = await self._find_existing_doc(
+                        content_key=content_key,
+                        ext_id=item.external_id,
+                        content_type=item.type,
+                        supports_content_key=supports_content_key,
+                    )
+                    if doc is None:
+                        logger.warning(
+                            "Duplicate content metadata without resolvable doc type=%s ext_id=%s",
+                            item.type,
+                            item.external_id,
+                        )
+                        continue
+                    self._apply_item_to_doc(doc, item, content_key, supports_content_key)
+                    await doc.save()
             if doc is not None and not doc.features_vector:
                 docs_to_vectorize.append((doc, item))
             count += 1
