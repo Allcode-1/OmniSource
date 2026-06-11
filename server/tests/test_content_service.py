@@ -258,6 +258,30 @@ async def test_get_preview_selects_official_movie_trailer(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_preview_uses_youtube_lookup_when_movie_videos_empty(monkeypatch) -> None:
+    service = ContentService()
+
+    async def fake_videos(movie_id: int):
+        assert movie_id == 550
+        return {"results": []}
+
+    async def fake_youtube_lookup(query: str):
+        assert query == "Fight Club trailer"
+        return "movieABC123"
+
+    monkeypatch.setattr(service.tmdb, "get_movie_videos", fake_videos)
+    monkeypatch.setattr(service, "_find_youtube_video_id", fake_youtube_lookup)
+
+    preview = await service.get_preview("movie", "550", title="Fight Club")
+
+    assert preview is not None
+    assert preview.provider == "YouTube"
+    assert preview.preview_type == "video"
+    assert preview.url == "https://www.youtube.com/watch?v=movieABC123"
+    assert preview.embed_url == "https://www.youtube.com/embed/movieABC123"
+
+
+@pytest.mark.asyncio
 async def test_get_preview_uses_spotify_audio_url(monkeypatch) -> None:
     service = ContentService()
 

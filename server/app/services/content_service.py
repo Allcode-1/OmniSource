@@ -730,7 +730,22 @@ class ContentService:
             and item.get("key")
         ]
         if not youtube_videos:
-            return None
+            query = f"{title or external_id} trailer"
+            youtube_id = await self._find_youtube_video_id(query)
+            if youtube_id is None:
+                return None
+            preview_title = title or "Trailer"
+            return ContentPreview(
+                content_type="movie",
+                external_id=external_id,
+                provider="YouTube",
+                preview_type="video",
+                title=preview_title,
+                url=f"https://www.youtube.com/watch?v={youtube_id}",
+                embed_url=f"https://www.youtube.com/embed/{youtube_id}",
+                external_url=f"https://www.themoviedb.org/movie/{external_id}",
+                is_playable=True,
+            )
 
         def score(item: dict) -> tuple[int, int, str]:
             video_type = str(item.get("type") or "")

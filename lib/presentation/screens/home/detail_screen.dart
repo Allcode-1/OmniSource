@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -403,9 +405,18 @@ class _DetailScreenState extends State<DetailScreen>
     if (preview == null && !_loadingPreview) {
       setState(() => _loadingPreview = true);
       try {
-        preview = await context.read<ContentRepository>().getPreview(content);
+        preview = await context
+            .read<ContentRepository>()
+            .getPreview(content)
+            .timeout(const Duration(seconds: 14));
         if (!mounted) return;
         setState(() => _preview = preview);
+      } on TimeoutException {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Preview request timed out')),
+        );
+        return;
       } catch (_) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
