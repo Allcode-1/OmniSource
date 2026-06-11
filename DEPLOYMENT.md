@@ -48,11 +48,57 @@ docker compose ps
 Health checks:
 
 ```powershell
-curl http://localhost/health
-curl http://localhost/diagnostics
+curl http://localhost/api/health
+curl http://localhost/api/diagnostics
 ```
 
-## 4. Semantic vectors
+## 4. CI/CD
+
+GitHub Actions has two workflows:
+
+1. `.github/workflows/ci.yml` runs checks and tests.
+2. `.github/workflows/deploy.yml` deploys after CI passes on `main`/`master`, or manually from the GitHub Actions tab.
+
+Add these repository secrets in GitHub:
+
+```text
+DEPLOY_HOST=5.42.108.117
+DEPLOY_USER=<ssh user>
+DEPLOY_SSH_KEY=<private ssh key for that user>
+```
+
+Optional secrets:
+
+```text
+DEPLOY_PORT=22
+DEPLOY_PATH=/opt/omnisource
+API_BASE_URL=http://5.42.108.117/api
+```
+
+The server user must be able to:
+
+1. SSH into the host.
+2. Write to `/opt/omnisource` or the custom `DEPLOY_PATH`.
+3. Write to `/var/www/omnisource/web`.
+4. Run `docker compose`.
+5. Run `rsync`.
+
+The deploy workflow keeps production-only files on the server:
+
+1. Root `.env`
+2. `server/.env`
+3. `server/certs/`
+
+Manual server redeploy, if needed:
+
+```bash
+cd /opt/omnisource
+docker compose up -d --build api nginx
+docker compose ps
+curl http://127.0.0.1/api/health
+```
+
+## 5. Semantic vectors
 
 The Docker image bakes the SentenceTransformers model cache during build, so
 semantic mode does not download the model at container startup.

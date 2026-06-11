@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/content_display.dart';
 import '../../../domain/entities/unified_content.dart';
 import '../../../domain/repositories/content_repository.dart';
 import '../../widgets/minimal_page_header.dart';
@@ -27,13 +28,13 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
       title: 'Late Night',
       tags: ['chill', 'dark'],
       type: 'music',
-      colors: [Color(0xFF7C3AED), Color(0xFFDB2777)],
+      colors: [Color(0xFF1D4ED8), Color(0xFF06B6D4)],
     ),
     _CollectionConfig(
       title: 'Mind Benders',
       tags: ['mystery', 'mind-bending'],
       type: 'all',
-      colors: [Color(0xFFFF375F), Color(0xFFFF9F0A)],
+      colors: [Color(0xFF0F766E), Color(0xFFEAB308)],
     ),
     _CollectionConfig(
       title: 'Epic Worlds',
@@ -273,6 +274,8 @@ class _CollectionDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayItems = groupMusicAlbums(items);
+
     return Scaffold(
       backgroundColor: AppTheme.appBackground,
       body: CustomScrollView(
@@ -281,11 +284,12 @@ class _CollectionDetailScreen extends StatelessWidget {
           SliverToBoxAdapter(child: MinimalPageHeader(title: collection.title)),
           SliverToBoxAdapter(
             child: SubtleCountText(
-              text: '${items.length} picks from ${collection.tags.join(', ')}.',
+              text:
+                  '${displayItems.length} picks from ${collection.tags.join(', ')}.',
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 22)),
-          if (items.isEmpty)
+          if (displayItems.isEmpty)
             const SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
@@ -299,16 +303,19 @@ class _CollectionDetailScreen extends StatelessWidget {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 104),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 18,
-                  childAspectRatio: 0.63,
+                  childAspectRatio: contentGridAspectRatio(collection.type),
                 ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) => SearchGridCard(item: items[index]),
-                  childCount: items.length,
-                ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final cluster = displayItems[index];
+                  return SearchGridCard(
+                    item: cluster.primary,
+                    groupedItems: cluster.items,
+                  );
+                }, childCount: displayItems.length),
               ),
             ),
         ],

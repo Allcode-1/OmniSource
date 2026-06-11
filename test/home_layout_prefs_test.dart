@@ -12,7 +12,9 @@ void main() {
         hiddenSections: {'For You'},
       );
 
-      final updated = config.copyWith(orderedSections: ['For You', 'Trending Now']);
+      final updated = config.copyWith(
+        orderedSections: ['For You', 'Trending Now'],
+      );
 
       expect(updated.orderedSections, ['For You', 'Trending Now']);
       expect(updated.hiddenSections, {'For You'});

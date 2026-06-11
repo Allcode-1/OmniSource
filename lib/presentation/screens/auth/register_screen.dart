@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/auth/auth_state.dart';
 import '../../../core/utils/validators.dart';
@@ -101,7 +102,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (state is AuthLoading)
                         const Center(
                           child: CircularProgressIndicator(
-                            color: Colors.blueAccent,
+                            color: AppTheme.primary,
                           ),
                         )
                       else

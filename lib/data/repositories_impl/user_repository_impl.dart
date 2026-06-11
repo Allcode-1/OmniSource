@@ -34,10 +34,8 @@ class UserRepositoryImpl implements UserRepository {
     try {
       final response = await apiClient.dio.patch(
         ApiConstants.userUpdate,
-        data: <String, dynamic>{
-          'username': username,
-          'interests': interests,
-        }..removeWhere((_, value) => value == null),
+        data: <String, dynamic>{'username': username, 'interests': interests}
+          ..removeWhere((_, value) => value == null),
       );
       return UserModel.fromJson(response.data);
     } catch (e, st) {

@@ -49,6 +49,7 @@ class ApiConstants {
   static const String trending = "/content/trending";
   static const String home = "/content/home";
   static const String recommendations = "/content/recommendations";
+  static const String preview = "/content/preview";
 
   // Research
   static const String deepResearch = "/research/deep";

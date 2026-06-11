@@ -1,9 +1,11 @@
 import 'package:omnisource/data/models/playlist_model.dart';
 
 import '../../core/utils/app_logger.dart';
+import '../../domain/entities/content_preview.dart';
 import '../../domain/entities/unified_content.dart';
 import '../../domain/repositories/content_repository.dart';
 import '../models/content_model.dart';
+import '../models/content_preview_model.dart';
 import '../../core/constants/api_constants.dart';
 import 'package:dio/dio.dart';
 
@@ -70,10 +72,8 @@ class ContentRepositoryImpl implements ContentRepository {
     try {
       final response = await _dio.get(
         ApiConstants.search,
-        queryParameters: <String, dynamic>{
-          'query': query,
-          'type': type,
-        }..removeWhere((_, value) => value == null),
+        queryParameters: <String, dynamic>{'query': query, 'type': type}
+          ..removeWhere((_, value) => value == null),
       );
       return (response.data as List)
           .map((item) => ContentModel.fromJson(item))
@@ -182,10 +182,8 @@ class ContentRepositoryImpl implements ContentRepository {
     try {
       final response = await _dio.get(
         ApiConstants.deepResearch,
-        queryParameters: <String, dynamic>{
-          'tag': tag,
-          'type': type,
-        }..removeWhere((_, value) => value == null),
+        queryParameters: <String, dynamic>{'tag': tag, 'type': type}
+          ..removeWhere((_, value) => value == null),
       );
       return (response.data as List)
           .map((item) => ContentModel.fromJson(item))
@@ -193,6 +191,39 @@ class ContentRepositoryImpl implements ContentRepository {
     } catch (e, st) {
       AppLogger.error(
         'Deep research request failed',
+        error: e,
+        stackTrace: st,
+        name: 'ContentRepository',
+      );
+      rethrow;
+    }
+  }
+
+  @override
+  Future<ContentPreview?> getPreview(UnifiedContent item) async {
+    try {
+      final response = await _dio.get(
+        ApiConstants.preview,
+        queryParameters: <String, dynamic>{
+          'type': item.type,
+          'external_id': item.externalId,
+          'title': item.title,
+          'subtitle': item.subtitle,
+        }..removeWhere((_, value) => value == null),
+      );
+      return ContentPreviewModel.fromJson(response.data);
+    } on DioException catch (e, st) {
+      if (e.response?.statusCode == 404) return null;
+      AppLogger.error(
+        'Preview request failed',
+        error: e,
+        stackTrace: st,
+        name: 'ContentRepository',
+      );
+      rethrow;
+    } catch (e, st) {
+      AppLogger.error(
+        'Preview request failed',
         error: e,
         stackTrace: st,
         name: 'ContentRepository',

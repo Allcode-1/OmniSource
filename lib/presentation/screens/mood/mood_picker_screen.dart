@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/utils/content_display.dart';
 import '../../../domain/entities/unified_content.dart';
 import '../../../domain/repositories/content_repository.dart';
 import '../../widgets/secondary_header_sliver.dart';
@@ -124,6 +125,7 @@ class _MoodPickerScreenState extends State<MoodPickerScreen> {
   @override
   Widget build(BuildContext context) {
     final mood = _activeMood;
+    final displayResults = groupMusicAlbums(_results);
     return Scaffold(
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
@@ -231,7 +233,7 @@ class _MoodPickerScreenState extends State<MoodPickerScreen> {
                 ),
               ),
             )
-          else if (_results.isEmpty)
+          else if (displayResults.isEmpty)
             const SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
@@ -245,16 +247,19 @@ class _MoodPickerScreenState extends State<MoodPickerScreen> {
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 14,
-                  childAspectRatio: 0.63,
+                  childAspectRatio: contentGridAspectRatio(mood.type),
                 ),
-                delegate: SliverChildBuilderDelegate(
-                  childCount: _results.length,
-                  (context, index) => SearchGridCard(item: _results[index]),
-                ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final cluster = displayResults[index];
+                  return SearchGridCard(
+                    item: cluster.primary,
+                    groupedItems: cluster.items,
+                  );
+                }, childCount: displayResults.length),
               ),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 100)),

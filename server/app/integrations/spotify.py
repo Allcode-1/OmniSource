@@ -100,12 +100,25 @@ class SpotifyClient(BaseIntegration):
         if not query:
             return {"tracks": {"items": []}}
 
+        await self._ensure_token()
+        if not self._access_token:
+            return {"tracks": {"items": []}}
+
         params = {
             "q": query,
             "type": "track",
             "offset": offset,
             "limit": limit
         }
-        
+
         data = await self._get("/search", params=params)
+        if not data:
+            await self._ensure_token(force_refresh=True)
+            if self._access_token:
+                data = await self._get("/search", params=params)
         return data if data else {"tracks": {"items": []}}
+
+    async def get_track(self, track_id: str) -> dict | None:
+        if not track_id:
+            return None
+        return await self._get(f"/tracks/{track_id}")

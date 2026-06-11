@@ -1,0 +1,106 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+    steps:
+      - name: Checkout tested commit
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Checkout selected commit
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Flutter web
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_url="${API_BASE_URL:-http://5.42.108.117/api}"
+          flutter pub get
+          flutter build web --release \
+            --dart-define=API_BASE_URL="$api_url" \
+            --dart-define=USE_IMAGE_PROXY=true
+
+      - name: Prepare SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_HOST:?Missing DEPLOY_HOST secret}"
+          : "${DEPLOY_USER:?Missing DEPLOY_USER secret}"
+          : "${DEPLOY_SSH_KEY:?Missing DEPLOY_SSH_KEY secret}"
+
+          deploy_port="${DEPLOY_PORT:-22}"
+          deploy_path="${DEPLOY_PATH:-/opt/omnisource}"
+          echo "DEPLOY_PORT=$deploy_port" >> "$GITHUB_ENV"
+          echo "DEPLOY_PATH=$deploy_path" >> "$GITHUB_ENV"
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$deploy_port" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload project files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "mkdir -p '$DEPLOY_PATH' /var/www/omnisource/web"
+
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '.dart_tool/' \
+            --exclude '.idea/' \
+            --exclude 'build/' \
+            --exclude 'coverage/' \
+            --exclude '.env' \
+            --exclude 'server/.env' \
+            --exclude 'server/.venv/' \
+            --exclude 'server/venv/' \
+            --exclude 'server/certs/' \
+            -e "ssh -i ~/.ssh/deploy_key -p $DEPLOY_PORT" \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+
+      - name: Upload Flutter web build
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p $DEPLOY_PORT" \
+            build/web/ "$DEPLOY_USER@$DEPLOY_HOST:/var/www/omnisource/web/"
+
+      - name: Rebuild and restart Docker services
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd '$DEPLOY_PATH' && docker compose up -d --build api nginx && docker compose ps && curl -fsS http://127.0.0.1/api/health"

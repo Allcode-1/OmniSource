@@ -20,3 +20,9 @@ class GoogleBooksClient(BaseIntegration):
             "langRestrict": "en",
         }
         return await self._get("/volumes", params=params) or {"items": []}
+
+    async def get_volume(self, volume_id: str):
+        if not volume_id:
+            return None
+        params = {"key": self.api_key}
+        return await self._get(f"/volumes/{volume_id}", params=params)

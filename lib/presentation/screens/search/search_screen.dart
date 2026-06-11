@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/content_display.dart';
 
 import '../../../domain/entities/unified_content.dart';
 import '../../../domain/repositories/user_repository.dart';
@@ -60,6 +61,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.appBackground,
       body: BlocBuilder<SearchCubit, SearchState>(
         builder: (context, state) {
           final libraryState = context.watch<LibraryCubit>().state;
@@ -73,6 +75,7 @@ class _SearchScreenState extends State<SearchScreen> {
             state,
             likedIds,
           );
+          final displayResults = groupMusicAlbums(filtered);
 
           return Stack(
             children: [
@@ -105,7 +108,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   const SliverToBoxAdapter(child: SizedBox(height: 14)),
 
                   if (_searchController.text.isEmpty &&
-                      state.recentQueries.isNotEmpty)
+                      (state.recentQueries.isNotEmpty ||
+                          state.savedQueries.isNotEmpty))
                     _buildSearchHistory(context, state),
 
                   if (state.isLoading)
@@ -122,24 +126,28 @@ class _SearchScreenState extends State<SearchScreen> {
                               ),
                       ),
                     )
-                  else if (filtered.isEmpty)
-                    _buildEmptyState(_searchController.text.isEmpty)
+                  else if (displayResults.isEmpty)
+                    _buildEmptyState(
+                      _searchController.text.isEmpty,
+                      state.activeType,
+                    )
                   else
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       sliver: SliverGrid(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 14,
-                              mainAxisSpacing: 18,
-                              childAspectRatio: 0.63,
-                            ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) =>
-                              SearchGridCard(item: filtered[index]),
-                          childCount: filtered.length,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 18,
+                          childAspectRatio: _gridAspectRatio(state.activeType),
                         ),
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final cluster = displayResults[index];
+                          return SearchGridCard(
+                            item: cluster.primary,
+                            groupedItems: cluster.items,
+                          );
+                        }, childCount: displayResults.length),
                       ),
                     ),
 
@@ -176,7 +184,7 @@ class _SearchScreenState extends State<SearchScreen> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Theme.of(context).colorScheme.surface.withValues(alpha: 0.96),
+                AppTheme.appBackground.withValues(alpha: 0.96),
                 Colors.transparent,
               ],
             ),
@@ -220,23 +228,22 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildSearchBar(BuildContext context) {
-    final theme = Theme.of(context);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       height: 52,
       decoration: BoxDecoration(
-        color: theme.cardColor.withValues(alpha: 0.84),
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: _focusNode.hasFocus
               ? AppTheme.primary
-              : Colors.white.withValues(alpha: 0.08),
+              : AppTheme.ink.withValues(alpha: 0.08),
           width: 1.4,
         ),
         boxShadow: [
           if (_focusNode.hasFocus)
             BoxShadow(
-              color: AppTheme.primary.withValues(alpha: 0.2),
+              color: AppTheme.primary.withValues(alpha: 0.18),
               blurRadius: 12,
               spreadRadius: 1,
             ),
@@ -245,20 +252,23 @@ class _SearchScreenState extends State<SearchScreen> {
       child: CupertinoSearchTextField(
         controller: _searchController,
         focusNode: _focusNode,
-        backgroundColor: theme.cardColor.withValues(alpha: 0.84),
+        backgroundColor: Colors.transparent,
         borderRadius: BorderRadius.circular(14),
-        itemColor: Colors.white70,
-        style: const TextStyle(color: Colors.white, fontSize: 15),
-        placeholderStyle: const TextStyle(color: Colors.white54, fontSize: 15),
+        itemColor: AppTheme.ink.withValues(alpha: 0.7),
+        style: const TextStyle(color: AppTheme.ink, fontSize: 15),
+        placeholderStyle: TextStyle(
+          color: AppTheme.ink.withValues(alpha: 0.5),
+          fontSize: 15,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         prefixIcon: const Icon(
           CupertinoIcons.search,
-          color: Colors.white54,
+          color: AppTheme.secondary,
           size: 18,
         ),
         suffixIcon: const Icon(
           CupertinoIcons.xmark_circle_fill,
-          color: Colors.white30,
+          color: AppTheme.secondary,
           size: 16,
         ),
         placeholder: "Artists, movies, books",
@@ -277,9 +287,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildFilters(BuildContext context, String activeType) {
     final filters = [
-      {'label': 'All', 'value': 'all'},
-      {'label': 'Movies', 'value': 'movie'},
       {'label': 'Music', 'value': 'music'},
+      {'label': 'Movies', 'value': 'movie'},
       {'label': 'Books', 'value': 'book'},
     ];
 
@@ -302,10 +311,13 @@ class _SearchScreenState extends State<SearchScreen> {
                 duration: const Duration(milliseconds: 180),
                 padding: const EdgeInsets.symmetric(horizontal: 18),
                 decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppTheme.primary
-                      : Theme.of(context).cardColor.withValues(alpha: 0.82),
+                  color: isSelected ? AppTheme.primary : AppTheme.surface,
                   borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected
+                        ? AppTheme.primary
+                        : AppTheme.ink.withValues(alpha: 0.06),
+                  ),
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -313,7 +325,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: isSelected
+                        ? Colors.white
+                        : AppTheme.ink.withValues(alpha: 0.84),
                   ),
                 ),
               ),
@@ -334,56 +348,66 @@ class _SearchScreenState extends State<SearchScreen> {
             if (state.savedQueries.isNotEmpty) ...[
               const Text(
                 'Saved Searches',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: state.savedQueries.map((query) {
-                  return InputChip(
-                    label: Text(query),
-                    onPressed: () {
-                      _searchController.text = query;
-                      context.read<SearchCubit>().search(query);
-                      setState(() {});
-                    },
-                    onDeleted: () =>
-                        context.read<SearchCubit>().removeSavedQuery(query),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
+              ...state.savedQueries.take(6).map((query) {
+                return _HistoryQueryRow(
+                  icon: CupertinoIcons.bookmark_fill,
+                  query: query,
+                  onTap: () {
+                    _searchController.text = query;
+                    context.read<SearchCubit>().search(query);
+                    setState(() {});
+                  },
+                  onRemove: () =>
+                      context.read<SearchCubit>().removeSavedQuery(query),
+                );
+              }),
+              const SizedBox(height: 20),
             ],
-            Row(
-              children: [
-                const Text(
-                  'Recent Searches',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () =>
-                      context.read<SearchCubit>().clearRecentQueries(),
-                  child: const Text('Clear'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            ...state.recentQueries.take(6).map((query) {
-              return ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(CupertinoIcons.time),
-                title: Text(query),
-                onTap: () {
-                  _searchController.text = query;
-                  context.read<SearchCubit>().search(query);
-                  setState(() {});
-                },
-              );
-            }),
-            const SizedBox(height: 10),
+            if (state.recentQueries.isNotEmpty) ...[
+              Row(
+                children: [
+                  const Text(
+                    'Recent Searches',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () =>
+                        context.read<SearchCubit>().clearRecentQueries(),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Clear',
+                        style: TextStyle(
+                          color: AppTheme.primary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ...state.recentQueries.take(6).map((query) {
+                return _HistoryQueryRow(
+                  icon: CupertinoIcons.time,
+                  query: query,
+                  onTap: () {
+                    _searchController.text = query;
+                    context.read<SearchCubit>().search(query);
+                    setState(() {});
+                  },
+                  onRemove: () =>
+                      context.read<SearchCubit>().removeRecentQuery(query),
+                );
+              }),
+              const SizedBox(height: 10),
+            ],
           ],
         ),
       ),
@@ -419,7 +443,7 @@ class _SearchScreenState extends State<SearchScreen> {
     }).toList();
   }
 
-  Widget _buildEmptyState(bool isInitial) {
+  Widget _buildEmptyState(bool isInitial, String activeType) {
     return SliverFillRemaining(
       hasScrollBody: false,
       child: OmniEmptyState(
@@ -428,8 +452,84 @@ class _SearchScreenState extends State<SearchScreen> {
             : PhosphorIcons.slidersHorizontal(PhosphorIconsStyle.light),
         title: isInitial ? 'Find your next favorite' : 'No matches found',
         subtitle: isInitial
-            ? 'Search across movies, music, and books.'
+            ? _initialEmptySubtitle(activeType)
             : 'Try another query or switch the content type.',
+      ),
+    );
+  }
+
+  double _gridAspectRatio(String activeType) {
+    return contentGridAspectRatio(activeType);
+  }
+
+  String _initialEmptySubtitle(String activeType) {
+    switch (activeType) {
+      case 'movie':
+        return 'Search movies and cinematic picks.';
+      case 'book':
+        return 'Search books and authors.';
+      default:
+        return 'Search songs, albums, and artists.';
+    }
+  }
+}
+
+class _HistoryQueryRow extends StatelessWidget {
+  final IconData icon;
+  final String query;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+
+  const _HistoryQueryRow({
+    required this.icon,
+    required this.query,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: AppTheme.ink.withValues(alpha: 0.08)),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: AppTheme.ink.withValues(alpha: 0.5), size: 21),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                query,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.ink,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onRemove,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  CupertinoIcons.xmark_circle_fill,
+                  color: AppTheme.ink.withValues(alpha: 0.34),
+                  size: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

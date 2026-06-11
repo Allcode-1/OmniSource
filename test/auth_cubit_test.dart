@@ -99,25 +99,31 @@ void main() {
       expect(cubit.state, isA<AuthInitial>());
     });
 
-    test('completeOnboarding emits authenticated when current user exists', () async {
-      repository.currentUser = onboardedUser;
+    test(
+      'completeOnboarding emits authenticated when current user exists',
+      () async {
+        repository.currentUser = onboardedUser;
 
-      await cubit.completeOnboarding(['cyberpunk', 'noir']);
+        await cubit.completeOnboarding(['cyberpunk', 'noir']);
 
-      expect(repository.completeOnboardingCalls, 1);
-      expect(repository.lastOnboardingTags, ['cyberpunk', 'noir']);
-      expect(cubit.state, isA<AuthAuthenticated>());
-      expect((cubit.state as AuthAuthenticated).needsOnboarding, isFalse);
-    });
+        expect(repository.completeOnboardingCalls, 1);
+        expect(repository.lastOnboardingTags, ['cyberpunk', 'noir']);
+        expect(cubit.state, isA<AuthAuthenticated>());
+        expect((cubit.state as AuthAuthenticated).needsOnboarding, isFalse);
+      },
+    );
 
-    test('completeOnboarding emits error when user cannot be restored', () async {
-      repository.currentUser = null;
+    test(
+      'completeOnboarding emits error when user cannot be restored',
+      () async {
+        repository.currentUser = null;
 
-      await cubit.completeOnboarding(['x']);
+        await cubit.completeOnboarding(['x']);
 
-      expect(cubit.state, isA<AuthError>());
-      expect((cubit.state as AuthError).message, contains('Session expired'));
-    });
+        expect(cubit.state, isA<AuthError>());
+        expect((cubit.state as AuthError).message, contains('Session expired'));
+      },
+    );
 
     test('logout failure emits auth error', () async {
       repository.logoutError = Exception('logout failed');

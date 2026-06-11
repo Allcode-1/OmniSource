@@ -12,9 +12,15 @@ void main() {
     test('password validator checks all complexity branches', () {
       expect(Validators.password(''), 'Password is required');
       expect(Validators.password('Ab1!'), 'Minimum 8 characters');
-      expect(Validators.password('lowercase1!'), 'Need at least one uppercase letter');
+      expect(
+        Validators.password('lowercase1!'),
+        'Need at least one uppercase letter',
+      );
       expect(Validators.password('NoNumber!'), 'Need at least one number');
-      expect(Validators.password('NoSpecial1'), 'Need one special character (!@#\$&*)');
+      expect(
+        Validators.password('NoSpecial1'),
+        'Need one special character (!@#\$&*)',
+      );
       expect(Validators.password('StrongPass1!'), isNull);
     });
   });

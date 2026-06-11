@@ -10,6 +10,11 @@ class UnifiedContent {
   final List<String> genres;
   final String? releaseDate;
   final String? recommendationReason;
+  final String? albumId;
+  final String? albumTitle;
+  final String? artistName;
+  final String? previewUrl;
+  final String? externalUrl;
 
   UnifiedContent({
     required this.id,
@@ -23,5 +28,10 @@ class UnifiedContent {
     this.genres = const [],
     this.releaseDate,
     this.recommendationReason,
+    this.albumId,
+    this.albumTitle,
+    this.artistName,
+    this.previewUrl,
+    this.externalUrl,
   });
 }

@@ -3,23 +3,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/content_display.dart';
 import '../../../domain/entities/unified_content.dart';
 import '../../../domain/repositories/analytics_repository.dart';
 import '../../bloc/library/library_cubit.dart';
 import '../../bloc/library/library_state.dart';
+import '../../widgets/content_artwork.dart';
 import '../../widgets/content_quick_actions.dart';
-import '../../widgets/omni_cached_image.dart';
 import '../home/detail_screen.dart';
 
 class SearchGridCard extends StatelessWidget {
   final UnifiedContent item;
+  final List<UnifiedContent> groupedItems;
 
-  const SearchGridCard({super.key, required this.item});
+  const SearchGridCard({
+    super.key,
+    required this.item,
+    this.groupedItems = const [],
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final imageUrl = (item.imageUrl ?? '').trim();
+    final cluster = ContentCluster(
+      primary: item,
+      items: groupedItems.isEmpty ? [item] : groupedItems,
+    );
 
     return BlocBuilder<LibraryCubit, LibraryState>(
       builder: (context, state) {
@@ -42,65 +52,59 @@ class SearchGridCard extends StatelessWidget {
                 'rating': item.rating,
                 'release_date': item.releaseDate,
                 'genres': item.genres,
+                'grouped_count': cluster.trackCount,
               },
             );
             Navigator.push(
               context,
-              CupertinoPageRoute(builder: (_) => DetailScreen(content: item)),
+              CupertinoPageRoute(
+                builder: (_) =>
+                    DetailScreen(content: item, groupedItems: cluster.items),
+              ),
             );
           },
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: OmniCachedImage(
-                          imageUrl: imageUrl,
-                          fallback: _buildImageFallback(theme),
-                          memCacheWidth: 420,
-                        ),
+              AspectRatio(
+                aspectRatio: ContentArtwork.aspectRatioFor(item.type),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ContentArtwork(
+                        item: item,
+                        grouped: cluster.isMusicAlbumGroup,
+                        memCacheWidth: 480,
                       ),
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: [
-                                Colors.black.withValues(alpha: 0.32),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: _CircleAction(
+                        icon: PhosphorIcons.heart(
+                          isLiked
+                              ? PhosphorIconsStyle.fill
+                              : PhosphorIconsStyle.regular,
                         ),
+                        iconColor: isLiked
+                            ? const Color(0xFFFF5D73)
+                            : Colors.white,
+                        onTap: () =>
+                            context.read<LibraryCubit>().toggleFavorite(item),
                       ),
+                    ),
+                    if (cluster.isMusicAlbumGroup)
                       Positioned(
-                        top: 8,
                         right: 8,
-                        child: _CircleAction(
-                          icon: PhosphorIcons.heart(
-                            isLiked
-                                ? PhosphorIconsStyle.fill
-                                : PhosphorIconsStyle.regular,
-                          ),
-                          iconColor: isLiked
-                              ? const Color(0xFFFF6B7A)
-                              : Colors.white,
-                          onTap: () =>
-                              context.read<LibraryCubit>().toggleFavorite(item),
-                        ),
+                        bottom: 8,
+                        child: _CountBadge(count: cluster.trackCount),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                item.title,
+                cluster.displayTitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.titleMedium?.copyWith(
@@ -113,7 +117,7 @@ class SearchGridCard extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    _typeLabel(item.type),
+                    contentTypeLabel(item.type),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.white.withValues(alpha: 0.62),
                       fontWeight: FontWeight.w600,
@@ -123,7 +127,7 @@ class SearchGridCard extends StatelessWidget {
                   if (item.rating > 0) ...[
                     const SizedBox(width: 6),
                     Text(
-                      '• ${item.rating.toStringAsFixed(1)}',
+                      '- ${item.rating.toStringAsFixed(1)}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.white.withValues(alpha: 0.48),
                         fontSize: 11,
@@ -132,9 +136,9 @@ class SearchGridCard extends StatelessWidget {
                   ],
                 ],
               ),
-              if ((item.subtitle ?? '').isNotEmpty)
+              if (cluster.displaySubtitle().isNotEmpty)
                 Text(
-                  item.subtitle!,
+                  cluster.displaySubtitle(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -146,35 +150,6 @@ class SearchGridCard extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  String _typeLabel(String? type) {
-    switch (type) {
-      case 'movie':
-        return 'Movie';
-      case 'book':
-        return 'Book';
-      default:
-        return 'Music';
-    }
-  }
-
-  IconData _getIconData(String? type) {
-    switch (type) {
-      case 'movie':
-        return PhosphorIcons.filmSlate(PhosphorIconsStyle.light);
-      case 'book':
-        return PhosphorIcons.bookOpenText(PhosphorIconsStyle.light);
-      default:
-        return PhosphorIcons.musicNote(PhosphorIconsStyle.light);
-    }
-  }
-
-  Widget _buildImageFallback(ThemeData theme) {
-    return Container(
-      color: theme.cardColor.withValues(alpha: 0.92),
-      child: Icon(_getIconData(item.type), color: Colors.white24, size: 40),
     );
   }
 }
@@ -201,6 +176,32 @@ class _CircleAction extends StatelessWidget {
           shape: BoxShape.circle,
         ),
         child: Icon(icon, size: 17, color: iconColor),
+      ),
+    );
+  }
+}
+
+class _CountBadge extends StatelessWidget {
+  final int count;
+
+  const _CountBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppTheme.ink.withValues(alpha: 0.08)),
+      ),
+      child: Text(
+        '$count tracks',
+        style: const TextStyle(
+          color: AppTheme.ink,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

@@ -100,7 +100,10 @@ void main() {
       expect(model.id, 'i1');
       expect(model.type, 'view');
       expect(model.extId, 'ext-1');
-      expect(model.createdAt.isAfter(before.subtract(const Duration(seconds: 2))), isTrue);
+      expect(
+        model.createdAt.isAfter(before.subtract(const Duration(seconds: 2))),
+        isTrue,
+      );
     });
 
     test('UsageStatsModel parses nested metrics map', () {

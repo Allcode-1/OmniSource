@@ -26,10 +26,7 @@ class HomeLayoutConfig {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'order': orderedSections,
-      'hidden': hiddenSections.toList(),
-    };
+    return {'order': orderedSections, 'hidden': hiddenSections.toList()};
   }
 
   factory HomeLayoutConfig.fromJson(Map<String, dynamic> json) {

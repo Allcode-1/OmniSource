@@ -1,12 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../domain/repositories/analytics_repository.dart';
 import '../../widgets/app_screen_chrome.dart';
-import '../calendar/release_calendar_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../stats/stats_screen.dart';
 import '../timeline/activity_timeline_screen.dart';
@@ -60,17 +58,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
         slivers: [
           const OmniHeaderSliver(
             title: 'Settings',
-            subtitle: 'Recommendations, activity and app diagnostics',
+            subtitle: 'Personalization, activity and app controls',
           ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 OmniCard(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                   child: Row(
                     children: [
-                      const Expanded(
+                      Container(
+                        width: 38,
+                        height: 38,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.slider_horizontal_3,
+                          color: AppTheme.primary,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -83,9 +96,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             SizedBox(height: 5),
                             Text(
-                              'Hybrid ML mixes behavior with content signals',
+                              'Hybrid ML mixes behavior and content signals',
                               style: TextStyle(
-                                color: Colors.white54,
+                                color: AppTheme.ink.withValues(alpha: 0.52),
                                 fontSize: 12,
                               ),
                             ),
@@ -108,18 +121,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       OmniRowTile(
                         icon: CupertinoIcons.bell_fill,
+                        iconColor: AppTheme.primary,
                         title: 'Notifications',
                         subtitle: 'Digest and recommendation tips',
                         onTap: () => _push(const NotificationsScreen()),
-                      ),
-                      _Divider(),
-                      OmniRowTile(
-                        icon: PhosphorIcons.calendarDots(
-                          PhosphorIconsStyle.regular,
-                        ),
-                        title: 'Release Calendar',
-                        subtitle: 'Recent and upcoming drops',
-                        onTap: () => _push(const ReleaseCalendarScreen()),
                       ),
                     ],
                   ),
@@ -133,6 +138,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       OmniRowTile(
                         icon: CupertinoIcons.chart_bar_alt_fill,
+                        iconColor: AppTheme.primary,
                         title: 'Stats',
                         subtitle: 'CTR, saves and dwell time',
                         onTap: () => _push(const StatsScreen()),
@@ -140,6 +146,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _Divider(),
                       OmniRowTile(
                         icon: CupertinoIcons.time_solid,
+                        iconColor: AppTheme.primary,
                         title: 'Activity Timeline',
                         subtitle: 'Views, opens, likes and searches',
                         onTap: () => _push(const ActivityTimelineScreen()),
@@ -156,6 +163,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       OmniRowTile(
                         icon: CupertinoIcons.wrench_fill,
+                        iconColor: AppTheme.primary,
                         title: 'Debug Panel',
                         subtitle: 'A/B mode and backend health',
                         onTap: () => _push(const DebugPanelScreen()),
@@ -163,6 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _Divider(),
                       OmniRowTile(
                         icon: CupertinoIcons.cloud_download_fill,
+                        iconColor: AppTheme.primary,
                         title: 'Offline Queue',
                         subtitle: 'Pending analytics events',
                         onTap: () => _push(const OfflineQueueScreen()),
@@ -192,7 +201,7 @@ class _SectionLabel extends StatelessWidget {
         color: AppTheme.ink.withValues(alpha: 0.48),
         fontSize: 11,
         fontWeight: FontWeight.w600,
-        letterSpacing: 0.8,
+        letterSpacing: 0,
       ),
     );
   }

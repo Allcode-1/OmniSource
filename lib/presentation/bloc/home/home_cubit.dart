@@ -13,7 +13,8 @@ class HomeCubit extends Cubit<HomeState> {
   int _loadToken = 0;
   final Map<ContentCategory, HomeState> _stateCache = {};
 
-  HomeCubit(this.repository) : super(HomeState(category: ContentCategory.all));
+  HomeCubit(this.repository)
+    : super(HomeState(category: ContentCategory.music));
 
   void setCategory(ContentCategory category) {
     if (state.category == category) return;

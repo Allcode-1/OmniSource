@@ -3,13 +3,13 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   static const primary = Color(0xFF0984E3);
-  static const secondary = Color(0xFF58616B);
-  static const ink = Color(0xFFFAF0F0);
-  static const authBackground = Color(0xFF100E0E);
-  static const appBackground = Color(0xFF100E0E);
-  static const surface = Color(0xFF171414);
-  static const surfaceAlt = Color(0xFF211D1D);
-  static const line = Color(0xFF2B2B2B);
+  static const secondary = Color(0xFFA1A1A6);
+  static const ink = Color(0xFFF5F5F7);
+  static const authBackground = Color(0xFF000000);
+  static const appBackground = Color(0xFF000000);
+  static const surface = Color(0xFF1C1C1E);
+  static const surfaceAlt = Color(0xFF2C2C2E);
+  static const line = Color(0xFF2A2A2D);
 
   static ThemeData get authTheme => _buildTheme(
     scaffoldColor: authBackground,

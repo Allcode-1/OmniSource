@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/content_display.dart';
 import '../../../domain/entities/unified_content.dart';
 import '../../../domain/repositories/content_repository.dart';
 import '../../bloc/home/home_cubit.dart';
@@ -90,6 +91,7 @@ class _TrendingHubScreenState extends State<TrendingHubScreen> {
   @override
   Widget build(BuildContext context) {
     final items = _cache[_activeType] ?? const <UnifiedContent>[];
+    final displayItems = groupMusicAlbums(items);
 
     return Scaffold(
       backgroundColor: AppTheme.appBackground,
@@ -115,20 +117,20 @@ class _TrendingHubScreenState extends State<TrendingHubScreen> {
               child: SubtleCountText(
                 text: items.isEmpty
                     ? 'Trending picks will appear here.'
-                    : '${items.length} active picks in this stream.',
+                    : '${displayItems.length} active picks in this stream.',
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 22)),
-            if (_isLoading && items.isEmpty)
+            if (_isLoading && displayItems.isEmpty)
               const OmniGridSkeletonSliver(
                 padding: EdgeInsets.fromLTRB(24, 0, 24, 104),
               )
-            else if (_error.isNotEmpty && items.isEmpty)
+            else if (_error.isNotEmpty && displayItems.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: OmniErrorState(message: _error, onRetry: () => _load()),
               )
-            else if (items.isEmpty)
+            else if (displayItems.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: OmniEmptyState(
@@ -141,16 +143,19 @@ class _TrendingHubScreenState extends State<TrendingHubScreen> {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 104),
                 sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 18,
-                    childAspectRatio: 0.63,
+                    childAspectRatio: contentGridAspectRatio(_activeType),
                   ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => SearchGridCard(item: items[index]),
-                    childCount: items.length,
-                  ),
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final cluster = displayItems[index];
+                    return SearchGridCard(
+                      item: cluster.primary,
+                      groupedItems: cluster.items,
+                    );
+                  }, childCount: displayItems.length),
                 ),
               ),
           ],

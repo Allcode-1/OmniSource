@@ -133,7 +133,7 @@ class OmniSourceApp extends StatelessWidget {
             if (state is AuthLoading) {
               return const Scaffold(
                 body: Center(
-                  child: CircularProgressIndicator(color: Color(0xFF0984E3)),
+                  child: CircularProgressIndicator(color: AppTheme.primary),
                 ),
               );
             }

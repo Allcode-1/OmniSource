@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/content_display.dart';
 import '../../../domain/entities/unified_content.dart';
 import '../../../domain/repositories/analytics_repository.dart';
 import '../../../domain/repositories/user_repository.dart';
@@ -16,6 +17,7 @@ import '../../bloc/home/home_cubit.dart';
 import '../../bloc/library/library_cubit.dart';
 import '../../bloc/library/library_state.dart';
 import '../../widgets/app_feedback.dart';
+import '../../widgets/content_artwork.dart';
 import '../../widgets/content_quick_actions.dart';
 import '../../widgets/omni_cached_image.dart';
 import '../../widgets/user_avatar.dart';
@@ -34,7 +36,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const _blue = Color(0xFF0A84FF);
+  static const _accent = AppTheme.primary;
   static const _text = AppTheme.ink;
   static const _horizontalPadding = 20.0;
   static const _tabHorizontalPadding = 40.0;
@@ -231,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(
                       color: _text.withValues(alpha: selected ? 1 : 0.6),
                       fontSize: 16,
-                      fontWeight: FontWeight.w400,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                       height: 1,
                     ),
                   ),
@@ -241,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: selected ? 18 : 0,
                     height: 2,
                     decoration: BoxDecoration(
-                      color: _text,
+                      color: _accent,
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
@@ -355,7 +357,7 @@ class _ReleaseCalendarCard extends StatelessWidget {
                 ),
                 child: Icon(
                   PhosphorIcons.calendarDots(PhosphorIconsStyle.regular),
-                  color: AppTheme.ink,
+                  color: AppTheme.primary,
                   size: 23,
                 ),
               ),
@@ -435,7 +437,7 @@ class _HeroRecommendation extends StatelessWidget {
                 );
               },
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(24),
           child: SizedBox(
             height: 214,
             width: double.infinity,
@@ -445,12 +447,12 @@ class _HeroRecommendation extends StatelessWidget {
                 _heroGradient(),
                 if (imageUrl.isNotEmpty)
                   Positioned(
-                    left: 8,
-                    top: 8,
-                    right: 8,
-                    bottom: 8,
+                    left: 4,
+                    top: 4,
+                    right: 4,
+                    bottom: 4,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: BorderRadius.circular(20),
                       child: OmniCachedImage(
                         imageUrl: imageUrl,
                         fallback: const SizedBox.shrink(),
@@ -528,7 +530,7 @@ class _HeroRecommendation extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2A2224), Color(0xFFFF9DA8), Color(0xFFFF242E)],
+          colors: [Color(0xFF07111F), Color(0xFF0A84FF), Color(0xFF00C2FF)],
         ),
       ),
     );
@@ -578,6 +580,12 @@ class _ContentRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
+    final clusters = groupMusicAlbums(items).take(12).toList();
+    if (clusters.isEmpty) return const SizedBox.shrink();
+    final railHeight =
+        clusters.any((cluster) => cluster.primary.type != 'music')
+        ? 232.0
+        : 188.0;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 28),
@@ -587,17 +595,20 @@ class _ContentRail extends StatelessWidget {
           _SectionHeader(title: title, onSeeAll: onSeeAll),
           const SizedBox(height: 14),
           SizedBox(
-            height: 186,
+            height: railHeight,
             child: ListView.separated(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(
                 horizontal: _HomeScreenState._horizontalPadding,
               ),
               scrollDirection: Axis.horizontal,
-              itemCount: items.take(12).length,
+              itemCount: clusters.length,
               separatorBuilder: (context, index) => const SizedBox(width: 14),
               itemBuilder: (context, index) {
-                return _HomeContentTile(item: items[index], showType: showType);
+                return _HomeContentTile(
+                  cluster: clusters[index],
+                  showType: showType,
+                );
               },
             ),
           ),
@@ -608,17 +619,18 @@ class _ContentRail extends StatelessWidget {
 }
 
 class _HomeContentTile extends StatelessWidget {
-  final UnifiedContent item;
+  final ContentCluster cluster;
   final bool showType;
 
-  const _HomeContentTile({required this.item, required this.showType});
+  const _HomeContentTile({required this.cluster, required this.showType});
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = (item.imageUrl ?? '').trim();
+    final item = cluster.primary;
+    final width = item.type == 'music' ? 128.0 : 122.0;
 
     return SizedBox(
-      width: 118,
+      width: width,
       child: GestureDetector(
         onLongPress: () =>
             ContentQuickActions.show(context, item, source: 'home'),
@@ -626,50 +638,43 @@ class _HomeContentTile extends StatelessWidget {
           _trackOpen(context, item, 'home_rail');
           Navigator.push(
             context,
-            CupertinoPageRoute(builder: (_) => DetailScreen(content: item)),
+            CupertinoPageRoute(
+              builder: (_) =>
+                  DetailScreen(content: item, groupedItems: cluster.items),
+            ),
           );
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    OmniCachedImage(
-                      imageUrl: imageUrl,
-                      fallback: _TileFallback(type: item.type),
-                      memCacheWidth: 360,
-                    ),
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.08),
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.26),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+            AspectRatio(
+              aspectRatio: ContentArtwork.aspectRatioFor(item.type),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ContentArtwork(
+                    item: item,
+                    borderRadius: 18,
+                    grouped: cluster.isMusicAlbumGroup,
+                    memCacheWidth: 420,
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: _FavoriteButton(item: item, size: 32),
+                  ),
+                  if (cluster.isMusicAlbumGroup)
                     Positioned(
-                      top: 8,
                       right: 8,
-                      child: _FavoriteButton(item: item, size: 32),
+                      bottom: 8,
+                      child: _TrackCountBadge(count: cluster.trackCount),
                     ),
-                  ],
-                ),
+                ],
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              item.title,
+              cluster.displayTitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -681,7 +686,7 @@ class _HomeContentTile extends StatelessWidget {
             ),
             const SizedBox(height: 3),
             Text(
-              _tileMeta(item, showType),
+              cluster.displaySubtitle(showType: showType),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -746,6 +751,32 @@ class _FavoriteButton extends StatelessWidget {
   }
 }
 
+class _TrackCountBadge extends StatelessWidget {
+  final int count;
+
+  const _TrackCountBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppTheme.ink.withValues(alpha: 0.08)),
+      ),
+      child: Text(
+        '$count tracks',
+        style: const TextStyle(
+          color: AppTheme.ink,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
 class _CollectionsRail extends StatelessWidget {
   final VoidCallback onSeeAll;
 
@@ -762,12 +793,12 @@ class _CollectionsRail extends StatelessWidget {
       _CollectionPreview(
         title: 'Late Night',
         subtitle: 'Chill, dark',
-        colors: [Color(0xFF7C3AED), Color(0xFFDB2777)],
+        colors: [Color(0xFF1D4ED8), Color(0xFF06B6D4)],
       ),
       _CollectionPreview(
         title: 'Mind Benders',
         subtitle: 'Mystery, surreal',
-        colors: [Color(0xFFFF375F), Color(0xFFFF9F0A)],
+        colors: [Color(0xFF0F766E), Color(0xFFEAB308)],
       ),
       _CollectionPreview(
         title: 'Epic Worlds',
@@ -910,32 +941,13 @@ class _SectionHeader extends StatelessWidget {
               child: const Text(
                 'See all',
                 style: TextStyle(
-                  color: _HomeScreenState._blue,
+                  color: _HomeScreenState._accent,
                   fontSize: 14,
                   fontWeight: FontWeight.w400,
                 ),
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _TileFallback extends StatelessWidget {
-  final String type;
-
-  const _TileFallback({required this.type});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: AppTheme.surfaceAlt,
-      alignment: Alignment.center,
-      child: Icon(
-        _fallbackIcon(type),
-        color: AppTheme.ink.withValues(alpha: 0.32),
-        size: 30,
       ),
     );
   }
@@ -969,22 +981,6 @@ void _trackOpen(BuildContext context, UnifiedContent item, String source) {
   );
 }
 
-String _tileMeta(UnifiedContent item, bool showType) {
-  final reason = item.recommendationReason?.trim();
-  if (!showType && reason != null && reason.isNotEmpty) {
-    return reason;
-  }
-  final parts = <String>[];
-  if (showType) parts.add(_typeLabel(item.type));
-  if ((item.subtitle ?? '').trim().isNotEmpty) {
-    parts.add(item.subtitle!.trim());
-  } else if ((item.releaseDate ?? '').trim().isNotEmpty) {
-    parts.add(item.releaseDate!.trim());
-  }
-  if (item.rating > 0) parts.add(item.rating.toStringAsFixed(1));
-  return parts.take(2).join('  ');
-}
-
 String _typeLabel(String type) {
   switch (type) {
     case 'movie':
@@ -995,16 +991,5 @@ String _typeLabel(String type) {
       return 'Music';
     default:
       return 'Content';
-  }
-}
-
-IconData _fallbackIcon(String type) {
-  switch (type) {
-    case 'movie':
-      return PhosphorIcons.filmSlate(PhosphorIconsStyle.light);
-    case 'book':
-      return PhosphorIcons.bookOpenText(PhosphorIconsStyle.light);
-    default:
-      return PhosphorIcons.musicNote(PhosphorIconsStyle.light);
   }
 }

@@ -221,6 +221,94 @@ async def test_get_recommendations_handles_critical_error(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_preview_selects_official_movie_trailer(monkeypatch) -> None:
+    service = ContentService()
+
+    async def fake_videos(movie_id: int):
+        assert movie_id == 550
+        return {
+            "results": [
+                {
+                    "site": "YouTube",
+                    "type": "Teaser",
+                    "key": "teaser-key",
+                    "official": True,
+                    "published_at": "2024-01-01",
+                },
+                {
+                    "site": "YouTube",
+                    "type": "Trailer",
+                    "key": "trailer-key",
+                    "name": "Official trailer",
+                    "official": True,
+                    "published_at": "2024-01-02",
+                },
+            ]
+        }
+
+    monkeypatch.setattr(service.tmdb, "get_movie_videos", fake_videos)
+
+    preview = await service.get_preview("movie", "550", title="Fight Club")
+
+    assert preview is not None
+    assert preview.provider == "YouTube"
+    assert preview.preview_type == "video"
+    assert preview.url.endswith("trailer-key")
+    assert preview.embed_url == "https://www.youtube.com/embed/trailer-key"
+
+
+@pytest.mark.asyncio
+async def test_get_preview_uses_spotify_audio_url(monkeypatch) -> None:
+    service = ContentService()
+
+    async def fake_track(track_id: str):
+        assert track_id == "track-1"
+        return {
+            "name": "Song",
+            "preview_url": "https://audio.test/preview.mp3",
+            "artists": [{"name": "Artist"}],
+            "external_urls": {"spotify": "https://open.spotify.com/track/track-1"},
+        }
+
+    monkeypatch.setattr(service.spotify, "get_track", fake_track)
+
+    preview = await service.get_preview("music", "track-1", title="Song")
+
+    assert preview is not None
+    assert preview.provider == "Spotify"
+    assert preview.preview_type == "audio"
+    assert preview.url == "https://audio.test/preview.mp3"
+    assert preview.external_url == "https://open.spotify.com/track/track-1"
+
+
+@pytest.mark.asyncio
+async def test_get_preview_uses_google_books_reader_url(monkeypatch) -> None:
+    service = ContentService()
+
+    async def fake_volume(volume_id: str):
+        assert volume_id == "book-1"
+        return {
+            "volumeInfo": {
+                "title": "Book",
+                "infoLink": "https://books.google.com/book-info",
+            },
+            "accessInfo": {
+                "webReaderLink": "https://books.google.com/book-reader",
+            },
+        }
+
+    monkeypatch.setattr(service.books, "get_volume", fake_volume)
+
+    preview = await service.get_preview("book", "book-1", title="Book")
+
+    assert preview is not None
+    assert preview.provider == "Google Books"
+    assert preview.preview_type == "external"
+    assert preview.url == "https://books.google.com/book-reader"
+    assert preview.external_url == "https://books.google.com/book-info"
+
+
+@pytest.mark.asyncio
 async def test_get_recommendations_all_combines_sources(monkeypatch) -> None:
     service = ContentService()
     fake_redis = _FakeRedis()

@@ -4,9 +4,7 @@ import 'package:omnisource/presentation/widgets/custom_input.dart';
 
 Widget _wrap(Widget child) {
   return MaterialApp(
-    home: Scaffold(
-      body: Form(child: child),
-    ),
+    home: Scaffold(body: Form(child: child)),
   );
 }
 
@@ -36,12 +34,7 @@ void main() {
       addTearDown(controller.dispose);
 
       await tester.pumpWidget(
-        _wrap(
-          CustomInput(
-            label: 'Username',
-            controller: controller,
-          ),
-        ),
+        _wrap(CustomInput(label: 'Username', controller: controller)),
       );
 
       await tester.enterText(find.byType(TextFormField), 'neo');
@@ -62,7 +55,9 @@ void main() {
         ),
       );
 
-      final editableText = tester.widget<EditableText>(find.byType(EditableText));
+      final editableText = tester.widget<EditableText>(
+        find.byType(EditableText),
+      );
       expect(editableText.obscureText, isTrue);
     });
 

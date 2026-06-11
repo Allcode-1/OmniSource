@@ -67,8 +67,8 @@ void main() {
         expect(cubit.state.recommendations.first.externalId, 'r2');
         expect(cubit.state.homeMap.containsKey('Extra'), isTrue);
         expect(repository.trendingCalls, 0);
-        expect(repository.lastRecommendationsType, 'all');
-        expect(repository.lastHomeType, 'all');
+        expect(repository.lastRecommendationsType, 'music');
+        expect(repository.lastHomeType, 'music');
       },
     );
 
@@ -111,11 +111,11 @@ void main() {
     test('setCategory with same category does nothing', () async {
       repository.homeDataResponse = const {};
 
-      cubit.setCategory(ContentCategory.all);
+      cubit.setCategory(ContentCategory.music);
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(repository.trendingCalls, 0);
-      expect(cubit.state.category, ContentCategory.all);
+      expect(cubit.state.category, ContentCategory.music);
     });
 
     test('uses "Trending" key when "Trending Now" is absent', () async {

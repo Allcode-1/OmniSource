@@ -30,13 +30,13 @@ class _MainLayoutState extends State<MainLayout> {
       label: 'Home',
     ),
     _NavItem(
-      icon: PhosphorIconsRegular.compass,
-      activeIcon: PhosphorIconsFill.compass,
+      icon: PhosphorIconsRegular.sparkle,
+      activeIcon: PhosphorIconsFill.sparkle,
       label: 'Discover',
     ),
     _NavItem(
-      icon: PhosphorIconsRegular.stackSimple,
-      activeIcon: PhosphorIconsFill.stackSimple,
+      icon: PhosphorIconsRegular.stack,
+      activeIcon: PhosphorIconsFill.stack,
       label: 'Library',
     ),
     _NavItem(
@@ -49,31 +49,27 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBody: true,
+      extendBody: false,
       body: IndexedStack(index: _currentIndex, children: _screens),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        minimum: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-        child: SizedBox(
-          height: 66,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.surface.withValues(alpha: 0.86),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: AppTheme.ink.withValues(alpha: 0.08)),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x8A000000),
-                  blurRadius: 28,
-                  offset: Offset(0, 16),
-                ),
-              ],
-            ),
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFF090909).withValues(alpha: 0.98),
+          border: Border(
+            top: BorderSide(color: AppTheme.ink.withValues(alpha: 0.08)),
+          ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 66,
             child: Row(
               children: List.generate(_items.length, (index) {
                 final item = _items[index];
                 final selected = _currentIndex == index;
+                final color = selected
+                    ? AppTheme.primary
+                    : AppTheme.ink.withValues(alpha: 0.52);
+
                 return Expanded(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -82,25 +78,26 @@ class _MainLayoutState extends State<MainLayout> {
                       message: item.label,
                       child: Center(
                         child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               selected ? item.activeIcon : item.icon,
-                              size: 22,
-                              color: AppTheme.ink.withValues(
-                                alpha: selected ? 1 : 0.6,
-                              ),
+                              size: selected ? 24 : 23,
+                              color: color,
                             ),
-                            const SizedBox(height: 7),
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              width: selected ? 18 : 4,
-                              height: 2,
-                              decoration: BoxDecoration(
-                                color: AppTheme.ink.withValues(
-                                  alpha: selected ? 1 : 0,
-                                ),
-                                borderRadius: BorderRadius.circular(999),
+                            const SizedBox(height: 4),
+                            Text(
+                              item.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: color,
+                                fontSize: 10,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                height: 1,
                               ),
                             ),
                           ],

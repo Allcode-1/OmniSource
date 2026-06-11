@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_logger.dart';
+import '../../../core/utils/content_display.dart';
 import '../../../domain/entities/unified_content.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/repositories/content_repository.dart';
@@ -220,6 +221,8 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final displayResults = groupMusicAlbums(_results);
+
     return Scaffold(
       body: Stack(
         children: [
@@ -297,7 +300,7 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
                     ),
                   ),
                 )
-              else if (_results.isEmpty)
+              else if (displayResults.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
@@ -313,17 +316,19 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverGrid(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 14,
-                          mainAxisSpacing: 18,
-                          childAspectRatio: 0.63,
-                        ),
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) => SearchGridCard(item: _results[index]),
-                      childCount: _results.length,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 18,
+                      childAspectRatio: contentGridAspectRatio(_activeType),
                     ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final cluster = displayResults[index];
+                      return SearchGridCard(
+                        item: cluster.primary,
+                        groupedItems: cluster.items,
+                      );
+                    }, childCount: displayResults.length),
                   ),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 100)),

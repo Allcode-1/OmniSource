@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_logger.dart';
+import '../../../core/utils/content_display.dart';
 import '../../../domain/entities/interaction_event.dart';
 import '../../../domain/entities/usage_stats.dart';
 import '../../../domain/entities/unified_content.dart';
@@ -377,21 +378,29 @@ class _SmartLibraryScreenState extends State<SmartLibraryScreen> {
                   ),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 14,
-                    childAspectRatio: 0.63,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) =>
-                        SearchGridCard(item: recentlyLiked[index]),
-                    childCount: recentlyLiked.length,
-                  ),
-                ),
+              Builder(
+                builder: (context) {
+                  final displayItems = groupMusicAlbums(recentlyLiked);
+                  return SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 14,
+                            childAspectRatio: 0.56,
+                          ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final cluster = displayItems[index];
+                        return SearchGridCard(
+                          item: cluster.primary,
+                          groupedItems: cluster.items,
+                        );
+                      }, childCount: displayItems.length),
+                    ),
+                  );
+                },
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],

@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.redis import redis_client
 from app.services.content_service import ContentService
-from app.schemas.content import UnifiedContent
+from app.schemas.content import UnifiedContent, ContentPreview
 from app.auth.dependencies import get_optional_user
 from app.models.user import User
 from app.ml.engine import RecommenderEngine
@@ -164,6 +164,19 @@ async def home(type: str = Query("all")):
 @router.get("/discover", response_model=List[UnifiedContent])
 async def discover(tag: str = Query(...), type: str = Query("all")):
     return await service.get_discovery(tag, type)
+
+
+@router.get("/preview", response_model=ContentPreview)
+async def preview(
+    type: str = Query(..., pattern="^(movie|music|book)$"),
+    external_id: str = Query(..., min_length=1),
+    title: str | None = Query(None),
+    subtitle: str | None = Query(None),
+):
+    result = await service.get_preview(type, external_id, title, subtitle)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Preview is not available")
+    return result
 
 
 @router.get("/image-proxy")

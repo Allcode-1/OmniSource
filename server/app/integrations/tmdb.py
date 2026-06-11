@@ -105,6 +105,9 @@ class TMDBClient:
     async def get_movie_details(self, movie_id: int) -> Dict[str, Any]:
         return await self._make_request(f"movie/{movie_id}", {})
 
+    async def get_movie_videos(self, movie_id: int) -> Dict[str, Any]:
+        return await self._make_request(f"movie/{movie_id}/videos", {})
+
     async def close(self) -> None:
         await self._client.aclose()
 

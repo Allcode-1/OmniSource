@@ -2,21 +2,30 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/content_display.dart';
+import '../../../domain/entities/content_preview.dart';
 import '../../../domain/entities/unified_content.dart';
 import '../../../domain/repositories/analytics_repository.dart';
 import '../../../domain/repositories/content_repository.dart';
 import '../../bloc/library/library_cubit.dart';
 import '../../bloc/library/library_state.dart';
-import '../../widgets/omni_cached_image.dart';
+import '../../widgets/content_artwork.dart';
 import '../search/search_grid_card.dart';
 
 class DetailScreen extends StatefulWidget {
   final UnifiedContent content;
+  final List<UnifiedContent> groupedItems;
 
-  const DetailScreen({super.key, required this.content});
+  const DetailScreen({
+    super.key,
+    required this.content,
+    this.groupedItems = const [],
+  });
 
   @override
   State<DetailScreen> createState() => _DetailScreenState();
@@ -26,17 +35,28 @@ class _DetailScreenState extends State<DetailScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   late final DateTime _openedAt;
+  late final AudioPlayer _audioPlayer;
 
   bool _loadingRelated = true;
   String _relatedError = '';
   List<UnifiedContent> _related = const [];
+  bool _loadingPreview = false;
+  bool _previewPlaying = false;
+  ContentPreview? _preview;
 
   UnifiedContent get content => widget.content;
+  List<UnifiedContent> get groupItems =>
+      widget.groupedItems.isEmpty ? [content] : widget.groupedItems;
+  bool get isAlbumGroup => content.type == 'music' && groupItems.length > 1;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _audioPlayer = AudioPlayer();
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _previewPlaying = false);
+    });
     _openedAt = DateTime.now();
     _trackOpenDetail();
     _loadRelated();
@@ -45,6 +65,7 @@ class _DetailScreenState extends State<DetailScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _audioPlayer.dispose();
     _trackDwellTime();
     super.dispose();
   }
@@ -330,21 +351,27 @@ class _DetailScreenState extends State<DetailScreen>
         return [
           _SourceLink(
             title: 'TMDB',
-            url: 'https://www.themoviedb.org/movie/${content.externalId}',
+            url:
+                content.externalUrl ??
+                'https://www.themoviedb.org/movie/${content.externalId}',
           ),
         ];
       case 'music':
         return [
           _SourceLink(
             title: 'Spotify',
-            url: 'https://open.spotify.com/track/${content.externalId}',
+            url:
+                content.externalUrl ??
+                'https://open.spotify.com/track/${content.externalId}',
           ),
         ];
       case 'book':
         return [
           _SourceLink(
             title: 'Google Books',
-            url: 'https://books.google.com/books?id=${content.externalId}',
+            url:
+                content.externalUrl ??
+                'https://books.google.com/books?id=${content.externalId}',
           ),
         ];
       default:
@@ -353,20 +380,181 @@ class _DetailScreenState extends State<DetailScreen>
   }
 
   Future<void> _openSource(String url) async {
+    await _openUrl(url, fallbackMessage: 'Source link copied');
+  }
+
+  Future<void> _openUrl(
+    String url, {
+    String fallbackMessage = 'Link copied',
+  }) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null) {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (launched) return;
+    }
     await Clipboard.setData(ClipboardData(text: url));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Source link copied'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(fallbackMessage),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
 
+  Future<void> _handlePreviewTap() async {
+    var preview = _preview;
+    if (preview == null && !_loadingPreview) {
+      setState(() => _loadingPreview = true);
+      try {
+        preview = await context.read<ContentRepository>().getPreview(content);
+        if (!mounted) return;
+        setState(() => _preview = preview);
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Preview is not available')),
+        );
+        return;
+      } finally {
+        if (mounted) setState(() => _loadingPreview = false);
+      }
+    }
+
+    if (preview == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Preview is not available')));
+      return;
+    }
+    _showPreviewSheet(preview);
+  }
+
+  Future<void> _toggleAudioPreview(String url) async {
+    if (_previewPlaying) {
+      await _audioPlayer.pause();
+      if (mounted) setState(() => _previewPlaying = false);
+      return;
+    }
+    await _audioPlayer.play(UrlSource(url));
+    if (mounted) setState(() => _previewPlaying = true);
+  }
+
+  Future<void> _showPreviewSheet(ContentPreview preview) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return SafeArea(
+              child: Container(
+                margin: const EdgeInsets.all(10),
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(26),
+                  border: Border.all(
+                    color: AppTheme.ink.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 58,
+                          child: AspectRatio(
+                            aspectRatio: ContentArtwork.aspectRatioFor(
+                              content.type,
+                            ),
+                            child: ContentArtwork(
+                              item: content,
+                              borderRadius: 12,
+                              memCacheWidth: 220,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 13),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                preview.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppTheme.ink,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.12,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                preview.provider,
+                                style: TextStyle(
+                                  color: AppTheme.ink.withValues(alpha: 0.56),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    if (preview.previewType == 'audio')
+                      _PreviewButton(
+                        icon: _previewPlaying
+                            ? CupertinoIcons.pause_fill
+                            : CupertinoIcons.play_fill,
+                        label: _previewPlaying
+                            ? 'Pause Preview'
+                            : 'Play Preview',
+                        onTap: () async {
+                          await _toggleAudioPreview(preview.url);
+                          if (ctx.mounted) setSheetState(() {});
+                        },
+                      )
+                    else
+                      _PreviewButton(
+                        icon: CupertinoIcons.play_rectangle_fill,
+                        label: _previewOpenLabel(preview),
+                        onTap: () => _openUrl(preview.url),
+                      ),
+                    if ((preview.externalUrl ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _PreviewButton(
+                        icon: CupertinoIcons.arrow_up_right,
+                        label: _externalOpenLabel(preview),
+                        secondary: true,
+                        onTap: () => _openUrl(preview.externalUrl!),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (_previewPlaying) {
+      await _audioPlayer.stop();
+      if (mounted) setState(() => _previewPlaying = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final imageUrl = (content.imageUrl ?? '').trim();
-
     return Scaffold(
       backgroundColor: AppTheme.appBackground,
       body: BlocBuilder<LibraryCubit, LibraryState>(
@@ -416,12 +604,10 @@ class _DetailScreenState extends State<DetailScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Center(
-                        child: _Poster(imageUrl: imageUrl, item: content),
-                      ),
+                      Center(child: _Poster(item: content)),
                       const SizedBox(height: 26),
                       Text(
-                        content.title,
+                        _detailTitle(),
                         style: const TextStyle(
                           fontSize: 30,
                           fontWeight: FontWeight.w700,
@@ -449,6 +635,12 @@ class _DetailScreenState extends State<DetailScreen>
                               .toList(),
                         ),
                       ],
+                      const SizedBox(height: 22),
+                      _DetailPreviewAction(
+                        label: _previewActionLabel(),
+                        isLoading: _loadingPreview,
+                        onTap: _handlePreviewTap,
+                      ),
                       const SizedBox(height: 24),
                       _buildTabs(),
                       const SizedBox(height: 14),
@@ -477,6 +669,9 @@ class _DetailScreenState extends State<DetailScreen>
 
   String _metaLine() {
     final parts = <String>[_displayType(content.type)];
+    if (isAlbumGroup) {
+      parts.add('${groupItems.length} tracks');
+    }
     if (content.rating > 0) {
       parts.add(content.rating.toStringAsFixed(1));
     }
@@ -487,6 +682,35 @@ class _DetailScreenState extends State<DetailScreen>
       parts.add(content.subtitle!);
     }
     return parts.join('  -  ');
+  }
+
+  String _detailTitle() {
+    if (isAlbumGroup) return contentAlbumTitle(content) ?? content.title;
+    return content.title;
+  }
+
+  String _previewActionLabel() {
+    switch (content.type) {
+      case 'movie':
+        return 'Watch Trailer';
+      case 'book':
+        return 'Preview Book';
+      default:
+        return 'Listen Preview';
+    }
+  }
+
+  String _previewOpenLabel(ContentPreview preview) {
+    if (preview.contentType == 'movie') return 'Open Trailer';
+    if (preview.contentType == 'book') return 'Open Book Preview';
+    return 'Open Preview';
+  }
+
+  String _externalOpenLabel(ContentPreview preview) {
+    if (preview.provider == 'Spotify') return 'Open on Spotify';
+    if (preview.provider == 'Google Books') return 'Open in Google Books';
+    if (preview.provider == 'YouTube') return 'Open on YouTube';
+    return 'Open Source';
   }
 
   Widget _buildTabs() {
@@ -535,6 +759,27 @@ class _DetailScreenState extends State<DetailScreen>
           ),
         ),
         const SizedBox(height: 22),
+        if (isAlbumGroup) ...[
+          const Text(
+            'Tracks',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 10),
+          ...groupItems.map(
+            (track) => _TrackListRow(
+              item: track,
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  CupertinoPageRoute(
+                    builder: (_) => DetailScreen(content: track),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 22),
+        ],
         SizedBox(
           height: 48,
           child: FilledButton.icon(
@@ -581,14 +826,18 @@ class _DetailScreenState extends State<DetailScreen>
       padding: EdgeInsets.zero,
       physics: const BouncingScrollPhysics(),
       itemCount: _related.length.clamp(0, 6),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 14,
         mainAxisSpacing: 18,
-        childAspectRatio: 0.63,
+        childAspectRatio: _relatedGridAspectRatio(),
       ),
       itemBuilder: (context, index) => SearchGridCard(item: _related[index]),
     );
+  }
+
+  double _relatedGridAspectRatio() {
+    return contentGridAspectRatio(content.type);
   }
 
   Widget _buildSourcesTab() {
@@ -645,10 +894,9 @@ class _DetailScreenState extends State<DetailScreen>
 }
 
 class _Poster extends StatelessWidget {
-  final String imageUrl;
   final UnifiedContent item;
 
-  const _Poster({required this.imageUrl, required this.item});
+  const _Poster({required this.item});
 
   @override
   Widget build(BuildContext context) {
@@ -671,33 +919,8 @@ class _Poster extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: OmniCachedImage(
-          imageUrl: imageUrl,
-          fallback: _PosterFallback(item: item),
-          memCacheWidth: 720,
-        ),
+        child: ContentArtwork(item: item, borderRadius: 24, memCacheWidth: 720),
       ),
-    );
-  }
-}
-
-class _PosterFallback extends StatelessWidget {
-  final UnifiedContent item;
-
-  const _PosterFallback({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final icon = switch (item.type) {
-      'movie' => PhosphorIcons.filmSlate(),
-      'book' => PhosphorIcons.bookOpen(),
-      _ => PhosphorIcons.musicNote(),
-    };
-
-    return Container(
-      color: AppTheme.surfaceAlt,
-      alignment: Alignment.center,
-      child: Icon(icon, color: AppTheme.ink.withValues(alpha: 0.32), size: 52),
     );
   }
 }
@@ -749,6 +972,172 @@ class _MetaPill extends StatelessWidget {
           color: AppTheme.ink,
           fontSize: 12,
           fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailPreviewAction extends StatelessWidget {
+  final String label;
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  const _DetailPreviewAction({
+    required this.label,
+    required this.isLoading,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: isLoading ? null : onTap,
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: AppTheme.primary,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isLoading)
+              const CupertinoActivityIndicator(color: Colors.white)
+            else
+              const Icon(
+                CupertinoIcons.play_fill,
+                color: Colors.white,
+                size: 18,
+              ),
+            const SizedBox(width: 9),
+            Text(
+              isLoading ? 'Loading Preview' : label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool secondary;
+
+  const _PreviewButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.secondary = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: secondary
+              ? AppTheme.ink.withValues(alpha: 0.08)
+              : AppTheme.primary,
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: AppTheme.ink, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppTheme.ink,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TrackListRow extends StatelessWidget {
+  final UnifiedContent item;
+  final VoidCallback onTap;
+
+  const _TrackListRow({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: AppTheme.ink.withValues(alpha: 0.08)),
+          ),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 42,
+              height: 42,
+              child: ContentArtwork(
+                item: item,
+                borderRadius: 8,
+                memCacheWidth: 140,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.ink,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if ((item.subtitle ?? '').trim().isNotEmpty)
+                    Text(
+                      item.subtitle!.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppTheme.ink.withValues(alpha: 0.52),
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(
+              CupertinoIcons.chevron_right,
+              color: AppTheme.ink.withValues(alpha: 0.34),
+              size: 17,
+            ),
+          ],
         ),
       ),
     );

@@ -40,16 +40,9 @@ void main() {
     test('LibraryLoaded copyWith preserves fields when omitted', () {
       final initial = LibraryLoaded(
         favorites: [
-          makeContent(
-            id: 'f1',
-            externalId: 'f1',
-            type: 'movie',
-            title: 'Fav',
-          ),
+          makeContent(id: 'f1', externalId: 'f1', type: 'movie', title: 'Fav'),
         ],
-        playlists: [
-          PlaylistModel(id: 'p1', title: 'P1', items: const []),
-        ],
+        playlists: [PlaylistModel(id: 'p1', title: 'P1', items: const [])],
         playlistItemsById: {
           'p1': [
             makeContent(
@@ -64,12 +57,7 @@ void main() {
 
       final updated = initial.copyWith(
         favorites: [
-          makeContent(
-            id: 'f2',
-            externalId: 'f2',
-            type: 'book',
-            title: 'Fav 2',
-          ),
+          makeContent(id: 'f2', externalId: 'f2', type: 'book', title: 'Fav 2'),
         ],
       );
 

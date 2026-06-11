@@ -14,6 +14,11 @@ class ContentMetadata(Document):
     rating: float = 0.0
     release_date: Optional[str] = None
     genres: List[str] = Field(default_factory=list)
+    album_id: Optional[str] = None
+    album_title: Optional[str] = None
+    artist_name: Optional[str] = None
+    preview_url: Optional[str] = None
+    external_url: Optional[str] = None
     features_vector: List[float] = Field(default_factory=list)
     vector_dim: Optional[int] = None
     vector_model: Optional[str] = None

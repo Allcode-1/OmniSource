@@ -5,6 +5,7 @@ import 'package:omnisource/data/models/playlist_model.dart';
 import 'package:omnisource/domain/entities/unified_content.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../../core/utils/content_display.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../bloc/library/library_cubit.dart';
 import '../../bloc/library/library_state.dart';
@@ -21,8 +22,11 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
+  static const _recentPageSize = 10;
+
   bool _isPlaylistEditMode = false;
   bool _isDeletingPlaylists = false;
+  int _recentVisibleCount = _recentPageSize;
   final Set<String> _selectedPlaylistIds = {};
 
   @override
@@ -283,36 +287,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         ),
                       ),
                     ),
-                    if (state.favorites.isEmpty)
-                      SliverToBoxAdapter(
-                        child: SizedBox(
-                          height: 230,
-                          child: OmniEmptyState(
-                            icon: PhosphorIcons.heart(PhosphorIconsStyle.light),
-                            title: 'No favorites yet',
-                            subtitle:
-                                'Liked movies, songs, and books will appear here.',
-                          ),
-                        ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        sliver: SliverGrid(
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                mainAxisSpacing: 15,
-                                crossAxisSpacing: 15,
-                                childAspectRatio: 0.7,
-                              ),
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) =>
-                                ContentCard(item: state.favorites[index]),
-                            childCount: state.favorites.length,
-                          ),
-                        ),
-                      ),
+                    ..._buildRecentlyAddedSlivers(state.favorites),
                   ] else if (state is LibraryError)
                     SliverFillRemaining(
                       hasScrollBody: false,
@@ -395,6 +370,93 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildRecentlyAddedSlivers(List<UnifiedContent> items) {
+    if (items.isEmpty) {
+      return [
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 230,
+            child: OmniEmptyState(
+              icon: PhosphorIcons.heart(PhosphorIconsStyle.light),
+              title: 'No favorites yet',
+              subtitle: 'Liked movies, songs, and books will appear here.',
+            ),
+          ),
+        ),
+      ];
+    }
+
+    final clusters = groupMusicAlbums(items);
+    final visibleCount = clusters.length < _recentVisibleCount
+        ? clusters.length
+        : _recentVisibleCount;
+    final canShowMore = visibleCount < clusters.length;
+
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        sliver: SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 15,
+            crossAxisSpacing: 15,
+            childAspectRatio: 0.54,
+          ),
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final cluster = clusters[index];
+            return ContentCard(
+              item: cluster.primary,
+              groupedItems: cluster.items,
+            );
+          }, childCount: visibleCount),
+        ),
+      ),
+      if (clusters.length > _recentPageSize)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+            child: Center(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    if (canShowMore) {
+                      final next = _recentVisibleCount + _recentPageSize;
+                      _recentVisibleCount = next > clusters.length
+                          ? clusters.length
+                          : next;
+                    } else {
+                      _recentVisibleCount = _recentPageSize;
+                    }
+                  });
+                },
+                child: Container(
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: AppTheme.ink.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Text(
+                    canShowMore ? 'See more' : 'Show less',
+                    style: const TextStyle(
+                      color: AppTheme.primary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ];
   }
 
   Widget _buildFavoritesTile(List<UnifiedContent> favorites) {

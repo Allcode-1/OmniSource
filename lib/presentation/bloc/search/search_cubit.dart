@@ -149,6 +149,13 @@ class SearchCubit extends Cubit<SearchState> {
     await prefs.setStringList(_savedKey, updated);
   }
 
+  Future<void> removeRecentQuery(String query) async {
+    final updated = state.recentQueries.where((item) => item != query).toList();
+    emit(state.copyWith(recentQueries: updated));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_recentKey, updated);
+  }
+
   Future<void> clearRecentQueries() async {
     emit(state.copyWith(recentQueries: const []));
     final prefs = await SharedPreferences.getInstance();

@@ -1,5 +1,6 @@
 import 'package:omnisource/data/models/playlist_model.dart';
 import 'package:omnisource/domain/entities/app_notification.dart';
+import 'package:omnisource/domain/entities/content_preview.dart';
 import 'package:omnisource/domain/entities/interaction_event.dart';
 import 'package:omnisource/domain/entities/unified_content.dart';
 import 'package:omnisource/domain/entities/usage_stats.dart';
@@ -38,6 +39,7 @@ class FakeContentRepository implements ContentRepository {
   List<UnifiedContent> discoveryResponse = const [];
   List<UnifiedContent> deepResearchResponse = const [];
   List<PlaylistModel> playlistsResponse = const [];
+  ContentPreview? previewResponse;
   Map<String, List<UnifiedContent>> homeDataResponse = const {};
 
   Object? searchError;
@@ -46,6 +48,7 @@ class FakeContentRepository implements ContentRepository {
   Object? recommendationsError;
   Object? homeDataError;
   Object? toggleLikeError;
+  Object? previewError;
 
   int searchCalls = 0;
   int favoritesCalls = 0;
@@ -53,6 +56,7 @@ class FakeContentRepository implements ContentRepository {
   int recommendationsCalls = 0;
   int homeDataCalls = 0;
   int toggleLikeCalls = 0;
+  int previewCalls = 0;
 
   String? lastSearchType;
   String? lastSearchQuery;
@@ -60,6 +64,7 @@ class FakeContentRepository implements ContentRepository {
   String? lastRecommendationsType;
   String? lastHomeType;
   UnifiedContent? lastToggledContent;
+  UnifiedContent? lastPreviewContent;
 
   @override
   Future<List<UnifiedContent>> search(String query, {String? type}) async {
@@ -119,6 +124,14 @@ class FakeContentRepository implements ContentRepository {
     String? type,
   }) async {
     return deepResearchResponse;
+  }
+
+  @override
+  Future<ContentPreview?> getPreview(UnifiedContent item) async {
+    previewCalls++;
+    lastPreviewContent = item;
+    if (previewError != null) throw previewError!;
+    return previewResponse;
   }
 
   @override

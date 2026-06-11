@@ -63,12 +63,12 @@ class UserAvatar extends StatelessWidget {
 
   static List<Color> _paletteFor(String value) {
     const palettes = [
-      [Color(0xFFFF3B5F), Color(0xFFFF8A00)],
-      [Color(0xFF7C3AED), Color(0xFFEC4899)],
-      [Color(0xFF0EA5E9), Color(0xFF22C55E)],
-      [Color(0xFFFF375F), Color(0xFFAF52DE)],
-      [Color(0xFF2563EB), Color(0xFF06B6D4)],
-      [Color(0xFFEAB308), Color(0xFFEF4444)],
+      [Color(0xFF0A84FF), Color(0xFF00C2FF)],
+      [Color(0xFF2563EB), Color(0xFF22C55E)],
+      [Color(0xFF30D158), Color(0xFF34C759)],
+      [Color(0xFF38BDF8), Color(0xFF6366F1)],
+      [Color(0xFFFFD60A), Color(0xFFFF453A)],
+      [Color(0xFF64D2FF), Color(0xFF30D158)],
     ];
 
     final source = value.trim().isEmpty ? 'user' : value.trim().toLowerCase();

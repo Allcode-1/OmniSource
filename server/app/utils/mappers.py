@@ -62,7 +62,8 @@ class ContentMapper:
             image_url=f"https://image.tmdb.org/t/p/w500{movie.get('poster_path')}" if movie.get('poster_path') else None,
             rating=movie.get('vote_average', 0.0),
             genres=cls._tmdb_genres(movie),
-            release_date=movie.get('release_date')
+            release_date=movie.get('release_date'),
+            external_url=f"https://www.themoviedb.org/movie/{movie.get('id')}" if movie.get("id") else None,
         )
 
     @staticmethod
@@ -81,12 +82,15 @@ class ContentMapper:
             image_url=thumbnail,
             rating=info.get('averageRating', 0.0),
             genres=info.get('categories', []),
-            release_date=info.get('publishedDate')
+            release_date=info.get('publishedDate'),
+            preview_url=info.get("previewLink"),
+            external_url=info.get("infoLink") or info.get("canonicalVolumeLink"),
         )
 
     @staticmethod
     def map_spotify(track: dict) -> UnifiedContent:
         album = track.get("album", {})
+        album_id = str(album.get("id") or "")
         album_name = album.get("name", "Unknown")
         artist_names = [a.get("name", "") for a in track.get("artists", []) if a.get("name")]
         genres = [
@@ -112,5 +116,10 @@ class ContentMapper:
             image_url=ContentMapper._first_image(album.get("images")),
             rating=track.get('popularity', 0) / 10, # turn to 10grade rating
             genres=list(dict.fromkeys(genres))[:10],
-            release_date=album.get('release_date')
+            release_date=album.get('release_date'),
+            album_id=album_id or None,
+            album_title=album_name if album_name != "Unknown" else None,
+            artist_name=", ".join(artist_names) or None,
+            preview_url=track.get("preview_url"),
+            external_url=(track.get("external_urls") or {}).get("spotify"),
         )

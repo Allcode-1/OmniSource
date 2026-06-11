@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../domain/entities/unified_content.dart';
 import '../../bloc/library/library_cubit.dart';
+import '../../widgets/content_artwork.dart';
 import '../home/detail_screen.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
@@ -330,7 +331,10 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   }
 
   Widget _buildItemTile(UnifiedContent item, bool isSelected) {
-    final imageUrl = (item.imageUrl ?? '').trim();
+    final artAspect = ContentArtwork.aspectRatioFor(item.type);
+    final artWidth = item.type == 'music'
+        ? 58.0
+        : (58.0 * artAspect).clamp(38.0, 58.0);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
@@ -372,16 +376,13 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: SizedBox(
-                width: 58,
+                width: artWidth,
                 height: 58,
-                child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _itemFallback(),
-                      )
-                    : _itemFallback(),
+                child: ContentArtwork(
+                  item: item,
+                  borderRadius: 10,
+                  memCacheWidth: 220,
+                ),
               ),
             ),
             const SizedBox(width: 14),
@@ -423,16 +424,6 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     );
   }
 
-  Widget _itemFallback() {
-    return Container(
-      color: AppTheme.surfaceAlt,
-      child: Icon(
-        CupertinoIcons.photo,
-        color: AppTheme.ink.withValues(alpha: 0.3),
-      ),
-    );
-  }
-
   String _subtitle(UnifiedContent item) {
     final pieces = <String>[_typeLabel(item.type)];
     if (item.rating > 0) pieces.add(item.rating.toStringAsFixed(1));
@@ -469,7 +460,8 @@ class _PlaylistCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty || items.first.imageUrl?.trim().isEmpty != false) {
+    final firstItem = items.isEmpty ? null : items.first;
+    if (firstItem == null || firstItem.imageUrl?.trim().isEmpty != false) {
       return Container(
         width: 112,
         height: 112,
@@ -487,15 +479,27 @@ class _PlaylistCover extends StatelessWidget {
       );
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: Image.network(
-        items.first.imageUrl!,
-        width: 112,
-        height: 112,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            Container(width: 112, height: 112, color: AppTheme.surfaceAlt),
+    final artAspect = ContentArtwork.aspectRatioFor(firstItem.type);
+    final artWidth = firstItem.type == 'music'
+        ? 104.0
+        : (104.0 * artAspect).clamp(68.0, 104.0);
+
+    return Container(
+      width: 112,
+      height: 112,
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceAlt,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      alignment: Alignment.center,
+      child: SizedBox(
+        width: artWidth,
+        height: 104,
+        child: ContentArtwork(
+          item: firstItem,
+          borderRadius: 14,
+          memCacheWidth: 320,
+        ),
       ),
     );
   }

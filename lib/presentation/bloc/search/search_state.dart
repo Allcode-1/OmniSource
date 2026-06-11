@@ -3,7 +3,7 @@ import '../../../domain/entities/unified_content.dart';
 class SearchState {
   final List<UnifiedContent> results;
   final bool isLoading;
-  final String activeType; // 'all', 'movie', 'music', 'book'
+  final String activeType; // 'movie', 'music', 'book'
   final String errorMessage;
   final List<String> recentQueries;
   final List<String> savedQueries;
@@ -16,7 +16,7 @@ class SearchState {
   SearchState({
     this.results = const [],
     this.isLoading = false,
-    this.activeType = 'all',
+    this.activeType = 'music',
     this.errorMessage = '',
     this.recentQueries = const [],
     this.savedQueries = const [],

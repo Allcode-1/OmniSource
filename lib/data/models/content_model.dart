@@ -14,6 +14,11 @@ class ContentModel extends UnifiedContent {
     super.genres,
     super.releaseDate,
     super.recommendationReason,
+    super.albumId,
+    super.albumTitle,
+    super.artistName,
+    super.previewUrl,
+    super.externalUrl,
   });
 
   static String _asString(dynamic value, {String fallback = ''}) {
@@ -42,11 +47,7 @@ class ContentModel extends UnifiedContent {
   static String? _normalizeImageUrl(dynamic value) {
     final raw = _asString(value, fallback: '');
     if (raw.isEmpty) return null;
-    
-    if (raw.startsWith('http://') || raw.startsWith('https://')) {
-      return raw;
-    }
-    
+
     return ApiConstants.resolveImageUrl(raw);
   }
 
@@ -76,6 +77,21 @@ class ContentModel extends UnifiedContent {
             _asString(map['recommendation_reason'], fallback: '').isEmpty
             ? null
             : _asString(map['recommendation_reason']),
+        albumId: _asString(map['album_id'], fallback: '').isEmpty
+            ? null
+            : _asString(map['album_id']),
+        albumTitle: _asString(map['album_title'], fallback: '').isEmpty
+            ? null
+            : _asString(map['album_title']),
+        artistName: _asString(map['artist_name'], fallback: '').isEmpty
+            ? null
+            : _asString(map['artist_name']),
+        previewUrl: _asString(map['preview_url'], fallback: '').isEmpty
+            ? null
+            : _asString(map['preview_url']),
+        externalUrl: _asString(map['external_url'], fallback: '').isEmpty
+            ? null
+            : _asString(map['external_url']),
       );
     } catch (_) {
       return ContentModel.empty();
@@ -105,6 +121,11 @@ class ContentModel extends UnifiedContent {
       genres: entity.genres,
       releaseDate: entity.releaseDate,
       recommendationReason: entity.recommendationReason,
+      albumId: entity.albumId,
+      albumTitle: entity.albumTitle,
+      artistName: entity.artistName,
+      previewUrl: entity.previewUrl,
+      externalUrl: entity.externalUrl,
     );
   }
 
@@ -121,6 +142,11 @@ class ContentModel extends UnifiedContent {
       'genres': genres,
       'release_date': releaseDate,
       'recommendation_reason': recommendationReason,
+      'album_id': albumId,
+      'album_title': albumTitle,
+      'artist_name': artistName,
+      'preview_url': previewUrl,
+      'external_url': externalUrl,
     };
   }
 }

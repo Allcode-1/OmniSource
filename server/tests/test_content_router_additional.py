@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.auth import dependencies as deps
 from app.api.routers import content as content_router
-from app.schemas.content import UnifiedContent
+from app.schemas.content import ContentPreview, UnifiedContent
 
 
 def _item(ext_id: str, title: str, type_value: str = "movie") -> UnifiedContent:
@@ -68,6 +68,56 @@ def test_search_home_discover_delegate_to_service(monkeypatch) -> None:
 
     assert discover_response.status_code == 200
     assert discover_response.json()[0]["ext_id"] == "d1"
+
+
+def test_preview_delegates_to_service(monkeypatch) -> None:
+    captured = {}
+
+    async def fake_preview(type: str, external_id: str, title=None, subtitle=None):
+        captured["args"] = (type, external_id, title, subtitle)
+        return ContentPreview(
+            content_type=type,
+            external_id=external_id,
+            provider="YouTube",
+            preview_type="video",
+            title=title or "Trailer",
+            url="https://www.youtube.com/watch?v=abc123",
+            embed_url="https://www.youtube.com/embed/abc123",
+            is_playable=True,
+        )
+
+    monkeypatch.setattr(content_router.service, "get_preview", fake_preview)
+    client = TestClient(_build_app())
+
+    response = client.get(
+        "/content/preview",
+        params={
+            "type": "movie",
+            "external_id": "11",
+            "title": "Movie",
+            "subtitle": "Director",
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["args"] == ("movie", "11", "Movie", "Director")
+    assert response.json()["preview_type"] == "video"
+
+
+def test_preview_returns_404_when_unavailable(monkeypatch) -> None:
+    async def empty_preview(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(content_router.service, "get_preview", empty_preview)
+    client = TestClient(_build_app())
+
+    response = client.get(
+        "/content/preview",
+        params={"type": "music", "external_id": "track-1"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Preview is not available"
 
 
 def test_recommendations_auto_without_user_falls_back_to_service(monkeypatch) -> None:

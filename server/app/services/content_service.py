@@ -1,5 +1,6 @@
 import asyncio
 from typing import List, Dict, Any, Awaitable, Callable, TypeVar
+from urllib.parse import quote_plus
 from pymongo.errors import DuplicateKeyError
 
 from app.core.content_keys import make_content_key
@@ -11,7 +12,7 @@ from app.ml.vectorizer import get_vectorizer
 from app.models.content_meta import ContentMetadata
 from app.utils.mappers import ContentMapper
 from app.utils.sanitizer import ContentSanitizer
-from app.schemas.content import UnifiedContent
+from app.schemas.content import UnifiedContent, ContentPreview
 from app.core.tags import get_tag_queries
 from app.core.redis import redis_client
 from app.core.logging import get_logger
@@ -222,6 +223,11 @@ class ContentService:
                     rating=item.rating or 0.0,
                     release_date=item.release_date,
                     genres=item.genres or [],
+                    album_id=item.album_id,
+                    album_title=item.album_title,
+                    artist_name=item.artist_name,
+                    preview_url=item.preview_url,
+                    external_url=item.external_url,
                     features_vector=[],
                 )
                 try:
@@ -237,6 +243,11 @@ class ContentService:
                     ("description", item.description),
                     ("image_url", item.image_url),
                     ("release_date", item.release_date),
+                    ("album_id", item.album_id),
+                    ("album_title", item.album_title),
+                    ("artist_name", item.artist_name),
+                    ("preview_url", item.preview_url),
+                    ("external_url", item.external_url),
                 ):
                     if value and getattr(doc, attr, None) != value:
                         setattr(doc, attr, value)
@@ -679,6 +690,149 @@ class ContentService:
             return valid_results
 
         return await self._run_dedup(cache_key, self._inflight_recommendations, _build)
+
+    async def get_preview(
+        self,
+        content_type: str,
+        external_id: str,
+        title: str | None = None,
+        subtitle: str | None = None,
+    ) -> ContentPreview | None:
+        if content_type == "movie":
+            return await self._get_movie_preview(external_id, title)
+        if content_type == "music":
+            return await self._get_music_preview(external_id, title, subtitle)
+        if content_type == "book":
+            return await self._get_book_preview(external_id, title)
+        return None
+
+    async def _get_movie_preview(
+        self,
+        external_id: str,
+        title: str | None,
+    ) -> ContentPreview | None:
+        try:
+            movie_id = int(external_id)
+        except (TypeError, ValueError):
+            return None
+
+        data = await self.tmdb.get_movie_videos(movie_id)
+        videos = data.get("results", []) if isinstance(data, dict) else []
+        youtube_videos = [
+            item
+            for item in videos
+            if isinstance(item, dict)
+            and item.get("site") == "YouTube"
+            and item.get("key")
+        ]
+        if not youtube_videos:
+            return None
+
+        def score(item: dict) -> tuple[int, int, str]:
+            video_type = str(item.get("type") or "")
+            official = bool(item.get("official"))
+            return (
+                1 if video_type.lower() == "trailer" else 0,
+                1 if official else 0,
+                str(item.get("published_at") or ""),
+            )
+
+        selected = sorted(youtube_videos, key=score, reverse=True)[0]
+        key = str(selected["key"])
+        preview_title = str(selected.get("name") or title or "Trailer")
+        return ContentPreview(
+            content_type="movie",
+            external_id=external_id,
+            provider="YouTube",
+            preview_type="video",
+            title=preview_title,
+            url=f"https://www.youtube.com/watch?v={key}",
+            embed_url=f"https://www.youtube.com/embed/{key}",
+            external_url=f"https://www.themoviedb.org/movie/{external_id}",
+            is_playable=True,
+        )
+
+    async def _get_music_preview(
+        self,
+        external_id: str,
+        title: str | None,
+        subtitle: str | None,
+    ) -> ContentPreview | None:
+        track = await self.spotify.get_track(external_id)
+        if isinstance(track, dict):
+            track_title = str(track.get("name") or title or "Track preview")
+            artists = [
+                artist.get("name")
+                for artist in track.get("artists", [])
+                if isinstance(artist, dict) and artist.get("name")
+            ]
+            artist_text = ", ".join(artists) or subtitle or ""
+            external_url = (track.get("external_urls") or {}).get("spotify")
+            preview_url = track.get("preview_url")
+            if preview_url:
+                return ContentPreview(
+                    content_type="music",
+                    external_id=external_id,
+                    provider="Spotify",
+                    preview_type="audio",
+                    title=track_title,
+                    url=preview_url,
+                    external_url=external_url,
+                    is_playable=True,
+                )
+            query = quote_plus(f"{artist_text} {track_title}".strip())
+            if query:
+                return ContentPreview(
+                    content_type="music",
+                    external_id=external_id,
+                    provider="YouTube",
+                    preview_type="external",
+                    title=track_title,
+                    url=f"https://www.youtube.com/results?search_query={query}",
+                    external_url=external_url,
+                    is_playable=False,
+                )
+
+        query = quote_plus(" ".join(part for part in [subtitle, title] if part))
+        if not query:
+            return None
+        return ContentPreview(
+            content_type="music",
+            external_id=external_id,
+            provider="YouTube",
+            preview_type="external",
+            title=title or "Music preview",
+            url=f"https://www.youtube.com/results?search_query={query}",
+            is_playable=False,
+        )
+
+    async def _get_book_preview(
+        self,
+        external_id: str,
+        title: str | None,
+    ) -> ContentPreview | None:
+        data = await self.books.get_volume(external_id)
+        if not isinstance(data, dict):
+            return None
+        info = data.get("volumeInfo") if isinstance(data.get("volumeInfo"), dict) else {}
+        access = data.get("accessInfo") if isinstance(data.get("accessInfo"), dict) else {}
+        url = (
+            access.get("webReaderLink")
+            or info.get("previewLink")
+            or info.get("infoLink")
+        )
+        if not url:
+            return None
+        return ContentPreview(
+            content_type="book",
+            external_id=external_id,
+            provider="Google Books",
+            preview_type="external",
+            title=str(info.get("title") or title or "Book preview"),
+            url=str(url),
+            external_url=info.get("infoLink"),
+            is_playable=False,
+        )
 
     async def close(self) -> None:
         background_tasks = list(self._background_tasks)

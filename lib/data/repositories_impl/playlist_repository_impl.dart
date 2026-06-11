@@ -62,10 +62,8 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
     try {
       final response = await _dio.patch(
         '${ApiConstants.playlists}/$id',
-        data: <String, dynamic>{
-          'title': title,
-          'description': description,
-        }..removeWhere((_, value) => value == null),
+        data: <String, dynamic>{'title': title, 'description': description}
+          ..removeWhere((_, value) => value == null),
       );
       return PlaylistModel.fromJson(response.data);
     } catch (e, st) {
