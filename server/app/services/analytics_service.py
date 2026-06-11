@@ -36,6 +36,9 @@ class AnalyticsService:
             "open_detail": settings.ML_EVENT_WEIGHT_OPEN_DETAIL,
             "dwell_time": settings.ML_EVENT_WEIGHT_DWELL_TIME,
             "search": settings.ML_EVENT_WEIGHT_SEARCH,
+            "preview_open": settings.ML_EVENT_WEIGHT_PREVIEW_OPEN,
+            "preview_play": settings.ML_EVENT_WEIGHT_PREVIEW_PLAY,
+            "external_open": settings.ML_EVENT_WEIGHT_EXTERNAL_OPEN,
             "like": settings.ML_EVENT_WEIGHT_LIKE,
             "playlist_add": settings.ML_EVENT_WEIGHT_PLAYLIST_ADD,
         }
@@ -75,6 +78,11 @@ class AnalyticsService:
                 rating = payload.meta.get("rating") or 0.0
                 genres = payload.meta.get("genres") or []
                 release_date = payload.meta.get("release_date")
+                album_id = payload.meta.get("album_id")
+                album_title = payload.meta.get("album_title")
+                artist_name = payload.meta.get("artist_name")
+                preview_url = payload.meta.get("preview_url")
+                external_url = payload.meta.get("external_url")
                 try:
                     safe_rating = float(rating)
                 except (TypeError, ValueError):
@@ -107,6 +115,19 @@ class AnalyticsService:
                             if vector
                             else None,
                         }
+                        doc_payload.update(
+                            {
+                                key: value
+                                for key, value in {
+                                    "album_id": album_id,
+                                    "album_title": album_title,
+                                    "artist_name": artist_name,
+                                    "preview_url": preview_url,
+                                    "external_url": external_url,
+                                }.items()
+                                if value is not None
+                            }
+                        )
                         if supports_content_key and content_key:
                             doc_payload["content_key"] = content_key
                         await ContentMetadata(**doc_payload).insert()
@@ -125,6 +146,21 @@ class AnalyticsService:
                         updated = True
                     if not doc.image_url and image_url:
                         doc.image_url = str(image_url)
+                        updated = True
+                    if not getattr(doc, "album_id", None) and album_id:
+                        doc.album_id = str(album_id)
+                        updated = True
+                    if not getattr(doc, "album_title", None) and album_title:
+                        doc.album_title = str(album_title)
+                        updated = True
+                    if not getattr(doc, "artist_name", None) and artist_name:
+                        doc.artist_name = str(artist_name)
+                        updated = True
+                    if not getattr(doc, "preview_url", None) and preview_url:
+                        doc.preview_url = str(preview_url)
+                        updated = True
+                    if not getattr(doc, "external_url", None) and external_url:
+                        doc.external_url = str(external_url)
                         updated = True
                     if updated:
                         await doc.save()

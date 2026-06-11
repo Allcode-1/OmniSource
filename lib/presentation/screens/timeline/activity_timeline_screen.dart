@@ -53,6 +53,12 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
         return CupertinoIcons.timer;
       case 'search':
         return CupertinoIcons.search;
+      case 'preview_open':
+        return CupertinoIcons.play_rectangle;
+      case 'preview_play':
+        return CupertinoIcons.play_fill;
+      case 'external_open':
+        return CupertinoIcons.arrow_up_right;
       case 'like':
         return CupertinoIcons.heart_fill;
       case 'playlist_add':
@@ -70,6 +76,11 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
         return const Color(0xFF4ADE80);
       case 'search':
         return AppTheme.primary;
+      case 'preview_open':
+      case 'preview_play':
+        return const Color(0xFF38BDF8);
+      case 'external_open':
+        return const Color(0xFFA78BFA);
       default:
         return AppTheme.ink.withValues(alpha: 0.68);
     }

@@ -66,31 +66,67 @@ class _DetailScreenState extends State<DetailScreen>
   }
 
   Future<void> _trackOpenDetail() async {
+    await _trackContentEvent(type: 'open_detail');
+  }
+
+  Future<void> _trackContentEvent({
+    required String type,
+    double? weight,
+    Map<String, dynamic>? meta,
+  }) async {
     try {
       await context.read<AnalyticsRepository>().trackEvent(
-        type: 'open_detail',
+        type: type,
         extId: content.externalId,
         contentType: content.type,
-        meta: {
-          'title': content.title,
-          'subtitle': content.subtitle,
-          'image_url': content.imageUrl,
-          'rating': content.rating,
-          'release_date': content.releaseDate,
-          'genres': content.genres,
-          'description': content.description,
-        },
+        weight: weight,
+        meta: _contentEventMeta(meta),
       );
     } catch (_) {}
+  }
+
+  Map<String, dynamic> _contentEventMeta([Map<String, dynamic>? extra]) {
+    return <String, dynamic>{
+      'title': content.title,
+      'subtitle': content.subtitle,
+      'image_url': content.imageUrl,
+      'rating': content.rating,
+      'release_date': content.releaseDate,
+      'genres': content.genres,
+      'description': content.description,
+      'album_id': content.albumId,
+      'album_title': content.albumTitle,
+      'artist_name': content.artistName,
+      'preview_url': content.previewUrl,
+      'external_url': content.externalUrl,
+      if (extra != null) ...extra,
+    }..removeWhere((_, value) => value == null);
+  }
+
+  Future<void> _trackPreviewEvent(
+    String type,
+    ContentPreview preview, {
+    String source = 'detail',
+  }) {
+    return _trackContentEvent(
+      type: type,
+      meta: {
+        'source': source,
+        'provider': preview.provider,
+        'preview_type': preview.previewType,
+        'preview_title': preview.title,
+        'preview_url': preview.url,
+        'preview_external_url': preview.externalUrl,
+        'is_playable': preview.isPlayable,
+      },
+    );
   }
 
   Future<void> _trackDwellTime() async {
     try {
       final seconds = DateTime.now().difference(_openedAt).inSeconds.toDouble();
-      await context.read<AnalyticsRepository>().trackEvent(
+      await _trackContentEvent(
         type: 'dwell_time',
-        extId: content.externalId,
-        contentType: content.type,
         weight: seconds > 0 ? seconds / 60 : 0.0,
         meta: {'seconds': seconds},
       );
@@ -375,6 +411,10 @@ class _DetailScreenState extends State<DetailScreen>
   }
 
   Future<void> _openSource(String url) async {
+    await _trackContentEvent(
+      type: 'external_open',
+      meta: {'source': 'detail_source', 'url': url},
+    );
     await _openUrl(url, fallbackMessage: 'Source link copied');
   }
 
@@ -436,7 +476,10 @@ class _DetailScreenState extends State<DetailScreen>
       return;
     }
 
+    await _trackPreviewEvent('preview_open', preview);
+
     if (preview.contentType == 'music' && preview.previewType == 'audio') {
+      await _trackPreviewEvent('preview_play', preview, source: 'audio_mini');
       await PreviewPlayerController.instance.showAudio(
         item: content,
         preview: preview,
@@ -449,17 +492,22 @@ class _DetailScreenState extends State<DetailScreen>
         item: content,
         preview: preview,
       );
-      if (shown) return;
+      if (shown) {
+        await _trackPreviewEvent('preview_play', preview, source: 'video_mini');
+        return;
+      }
     }
 
     if (preview.contentType == 'music' &&
         preview.previewType == 'external' &&
         preview.provider == 'YouTube') {
+      await _trackPreviewEvent('external_open', preview, source: 'youtube_search');
       await _openUrl(preview.url, fallbackMessage: 'YouTube link copied');
       return;
     }
 
     if (preview.contentType == 'book') {
+      await _trackPreviewEvent('external_open', preview, source: 'book_preview');
       await _openUrl(preview.url, fallbackMessage: 'Book preview link copied');
       return;
     }
@@ -540,6 +588,11 @@ class _DetailScreenState extends State<DetailScreen>
                         label: 'Listen Preview',
                         onTap: () async {
                           Navigator.pop(ctx);
+                          await _trackPreviewEvent(
+                            'preview_play',
+                            preview,
+                            source: 'preview_sheet_audio',
+                          );
                           await PreviewPlayerController.instance.showAudio(
                             item: content,
                             preview: preview,
@@ -550,7 +603,14 @@ class _DetailScreenState extends State<DetailScreen>
                       _PreviewButton(
                         icon: CupertinoIcons.play_rectangle_fill,
                         label: _previewOpenLabel(preview),
-                        onTap: () => _openUrl(preview.url),
+                        onTap: () async {
+                          await _trackPreviewEvent(
+                            'external_open',
+                            preview,
+                            source: 'preview_sheet',
+                          );
+                          await _openUrl(preview.url);
+                        },
                       ),
                     if (_shouldShowExternalButton(preview)) ...[
                       const SizedBox(height: 10),
@@ -558,7 +618,14 @@ class _DetailScreenState extends State<DetailScreen>
                         icon: CupertinoIcons.arrow_up_right,
                         label: _externalOpenLabel(preview),
                         secondary: true,
-                        onTap: () => _openUrl(preview.externalUrl!.trim()),
+                        onTap: () async {
+                          await _trackPreviewEvent(
+                            'external_open',
+                            preview,
+                            source: 'preview_sheet_external',
+                          );
+                          await _openUrl(preview.externalUrl!.trim());
+                        },
                       ),
                     ],
                   ],

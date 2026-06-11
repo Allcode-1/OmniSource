@@ -71,6 +71,11 @@ def test_track_event_request_rejects_unsupported_event_type() -> None:
         TrackEventRequest(type="unsupported", ext_id="x1", content_type="movie")
 
 
+def test_track_event_request_accepts_preview_events() -> None:
+    payload = TrackEventRequest(type="preview_play", ext_id="x1", content_type="music")
+    assert payload.type == "preview_play"
+
+
 def test_unified_content_alias_supports_ext_id_and_id() -> None:
     model = UnifiedContent.model_validate(
         {

@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager, suppress
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
-from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
@@ -222,6 +221,9 @@ async def diagnostics():
                 "view": settings.ML_EVENT_WEIGHT_VIEW,
                 "open_detail": settings.ML_EVENT_WEIGHT_OPEN_DETAIL,
                 "dwell_time": settings.ML_EVENT_WEIGHT_DWELL_TIME,
+                "preview_open": settings.ML_EVENT_WEIGHT_PREVIEW_OPEN,
+                "preview_play": settings.ML_EVENT_WEIGHT_PREVIEW_PLAY,
+                "external_open": settings.ML_EVENT_WEIGHT_EXTERNAL_OPEN,
                 "like": settings.ML_EVENT_WEIGHT_LIKE,
                 "playlist_add": settings.ML_EVENT_WEIGHT_PLAYLIST_ADD,
             },

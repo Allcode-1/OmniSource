@@ -9,6 +9,9 @@ ALLOWED_EVENT_TYPES = {
     "open_detail",
     "dwell_time",
     "search",
+    "preview_open",
+    "preview_play",
+    "external_open",
     "like",
     "playlist_add",
 }

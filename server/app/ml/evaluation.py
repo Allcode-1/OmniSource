@@ -17,7 +17,14 @@ logger = get_logger(__name__)
 
 
 class MLEvaluationService:
-    POSITIVE_EVENTS = ("like", "playlist_add", "open_detail")
+    CONTENT_TYPES = ("movie", "music", "book")
+    POSITIVE_EVENTS = (
+        "like",
+        "playlist_add",
+        "preview_play",
+        "external_open",
+        "open_detail",
+    )
 
     def __init__(self, engine: RecommenderEngine | None = None):
         self.engine = engine or RecommenderEngine()
@@ -89,7 +96,16 @@ class MLEvaluationService:
 
     async def _interaction_report(self) -> dict[str, Any]:
         event_counts = {}
-        for event_type in ("view", "open_detail", "like", "playlist_add", "dwell_time"):
+        for event_type in (
+            "view",
+            "open_detail",
+            "preview_open",
+            "preview_play",
+            "external_open",
+            "like",
+            "playlist_add",
+            "dwell_time",
+        ):
             event_counts[event_type] = await Interaction.find(
                 Interaction.type == event_type,
             ).count()
@@ -286,6 +302,12 @@ class MLEvaluationService:
 
         content_rows: list[dict[str, float | int | None]] = []
         hybrid_rows: list[dict[str, float | int | None]] = []
+        content_rows_by_type: dict[str, list[dict[str, float | int | None]]] = {
+            content_type: [] for content_type in self.CONTENT_TYPES
+        }
+        hybrid_rows_by_type: dict[str, list[dict[str, float | int | None]]] = {
+            content_type: [] for content_type in self.CONTENT_TYPES
+        }
         users_considered = 0
         users_skipped = 0
 
@@ -320,9 +342,10 @@ class MLEvaluationService:
                 content_type=content_type,
                 limit=limit,
             )
-            content_rows.append(
-                self._rank_metrics(content_only, holdout_ref, limit),
-            )
+            content_metrics = self._rank_metrics(content_only, holdout_ref, limit)
+            content_rows.append(content_metrics)
+            if content_type in content_rows_by_type:
+                content_rows_by_type[content_type].append(content_metrics)
 
             hybrid = await self.engine.get_recommendation_results(
                 user_id,
@@ -331,9 +354,14 @@ class MLEvaluationService:
                 exclude_interaction_refs={holdout_ref, holdout.ext_id},
                 before_created_at=holdout.created_at,
             )
-            hybrid_rows.append(
-                self._rank_metrics([item for item, _ in hybrid], holdout_ref, limit),
+            hybrid_metrics = self._rank_metrics(
+                [item for item, _ in hybrid],
+                holdout_ref,
+                limit,
             )
+            hybrid_rows.append(hybrid_metrics)
+            if content_type in hybrid_rows_by_type:
+                hybrid_rows_by_type[content_type].append(hybrid_metrics)
 
             if users_considered >= sample_users:
                 break
@@ -346,6 +374,17 @@ class MLEvaluationService:
             "variants": {
                 "content_only": self._aggregate_quality(content_rows),
                 "hybrid_ml": self._aggregate_quality(hybrid_rows),
+            },
+            "by_type": {
+                content_type: {
+                    "content_only": self._aggregate_quality(
+                        content_rows_by_type[content_type],
+                    ),
+                    "hybrid_ml": self._aggregate_quality(
+                        hybrid_rows_by_type[content_type],
+                    ),
+                }
+                for content_type in self.CONTENT_TYPES
             },
         }
 

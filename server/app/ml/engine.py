@@ -23,6 +23,12 @@ class RecommenderEngine:
     MIN_DEEP_VECTOR_CANDIDATES = 25
     MAX_RECOMMENDATION_CANDIDATES = 450
     MAX_DEEP_RESEARCH_CANDIDATES = 600
+    CONTENT_TYPES = ("movie", "music", "book")
+    ALL_TYPE_QUOTAS = {
+        "movie": 0.34,
+        "music": 0.34,
+        "book": 0.32,
+    }
 
     def __init__(self):
         self.similarity = SimilarityManager()
@@ -34,6 +40,9 @@ class RecommenderEngine:
             "view": settings.ML_EVENT_WEIGHT_VIEW,
             "open_detail": settings.ML_EVENT_WEIGHT_OPEN_DETAIL,
             "dwell_time": settings.ML_EVENT_WEIGHT_DWELL_TIME,
+            "preview_open": settings.ML_EVENT_WEIGHT_PREVIEW_OPEN,
+            "preview_play": settings.ML_EVENT_WEIGHT_PREVIEW_PLAY,
+            "external_open": settings.ML_EVENT_WEIGHT_EXTERNAL_OPEN,
             "like": settings.ML_EVENT_WEIGHT_LIKE,
             "playlist_add": settings.ML_EVENT_WEIGHT_PLAYLIST_ADD,
         }
@@ -55,6 +64,11 @@ class RecommenderEngine:
             genres=item.genres or [],
             release_date=item.release_date,
             recommendation_reason=reason,
+            album_id=getattr(item, "album_id", None),
+            album_title=getattr(item, "album_title", None),
+            artist_name=getattr(item, "artist_name", None),
+            preview_url=getattr(item, "preview_url", None),
+            external_url=getattr(item, "external_url", None),
         )
 
     @staticmethod
@@ -85,13 +99,34 @@ class RecommenderEngine:
             if genre and genre.strip()
         }
 
+    @staticmethod
+    def _normalized_text(value: object) -> str:
+        return " ".join(str(value or "").strip().lower().split())
+
+    def _music_identity(self, item: ContentMetadata) -> tuple[str, str]:
+        artist = self._normalized_text(
+            getattr(item, "artist_name", None) or getattr(item, "subtitle", None)
+        )
+        album = self._normalized_text(
+            getattr(item, "album_id", None) or getattr(item, "album_title", None)
+        )
+        return artist, album
+
     def _build_reason(
         self,
         item: ContentMetadata,
         profile_genres: Counter[str],
         profile_titles: list[str],
         interest_tags: Optional[List[str]] = None,
+        profile_artists: Counter[str] | None = None,
     ) -> str:
+        if item.type == "music" and profile_artists:
+            artist, _ = self._music_identity(item)
+            if artist and profile_artists.get(artist, 0) > 0:
+                display_artist = getattr(item, "artist_name", None) or item.subtitle
+                if display_artist:
+                    return f"More from {display_artist}"
+
         item_genres = self._normalized_genres(item)
         shared_genres = [
             genre
@@ -117,28 +152,121 @@ class RecommenderEngine:
         content_type: Optional[str],
     ) -> list[tuple[ContentMetadata, str]]:
         if content_type and content_type != "all":
-            return [(item, reason) for _, item, reason in scored_results[:limit]]
+            return self._take_diverse(scored_results, limit, max_per_bucket=4)
 
-        max_per_type = max(2, int(limit * 0.55))
-        type_counts: Counter[str] = Counter()
-        selected: list[tuple[ContentMetadata, str]] = []
-        deferred: list[tuple[ContentMetadata, str]] = []
+        selected: list[tuple[float, ContentMetadata, str]] = []
+        selected_refs: set[str] = set()
+        by_type: dict[str, list[tuple[float, ContentMetadata, str]]] = {
+            content_type: [] for content_type in self.CONTENT_TYPES
+        }
+        for row in scored_results:
+            by_type.setdefault(row[1].type, []).append(row)
 
-        for _, item, reason in scored_results:
-            if len(selected) >= limit:
-                break
-            if type_counts[item.type] >= max_per_type:
-                deferred.append((item, reason))
+        quotas = self._all_type_quotas(limit)
+        for current_type in self.CONTENT_TYPES:
+            rows = by_type.get(current_type, [])
+            if not rows:
                 continue
-            selected.append((item, reason))
-            type_counts[item.type] += 1
+            for row in self._take_diverse_rows(
+                rows,
+                quotas.get(current_type, 0),
+                max_per_bucket=3,
+            ):
+                ref = self._doc_ref(row[1])
+                if ref in selected_refs:
+                    continue
+                selected_refs.add(ref)
+                selected.append(row)
 
-        for item, reason in deferred:
-            if len(selected) >= limit:
+        if len(selected) < limit:
+            for row in self._take_diverse_rows(
+                scored_results,
+                limit,
+                max_per_bucket=4,
+            ):
+                ref = self._doc_ref(row[1])
+                if ref in selected_refs:
+                    continue
+                selected_refs.add(ref)
+                selected.append(row)
+                if len(selected) >= limit:
+                    break
+
+        selected.sort(key=lambda row: row[0], reverse=True)
+        return [(item, reason) for _, item, reason in selected[:limit]]
+
+    def _all_type_quotas(self, limit: int) -> dict[str, int]:
+        remaining = max(limit, 0)
+        quotas: dict[str, int] = {}
+        for current_type in self.CONTENT_TYPES[:-1]:
+            quota = min(remaining, max(1, round(limit * self.ALL_TYPE_QUOTAS[current_type])))
+            quotas[current_type] = quota
+            remaining -= quota
+        quotas[self.CONTENT_TYPES[-1]] = max(0, remaining)
+        return quotas
+
+    def _take_diverse(
+        self,
+        rows: list[tuple[float, ContentMetadata, str]],
+        limit: int,
+        *,
+        max_per_bucket: int,
+    ) -> list[tuple[ContentMetadata, str]]:
+        return [
+            (item, reason)
+            for _, item, reason in self._take_diverse_rows(
+                rows,
+                limit,
+                max_per_bucket=max_per_bucket,
+            )
+        ]
+
+    def _take_diverse_rows(
+        self,
+        rows: list[tuple[float, ContentMetadata, str]],
+        limit: int,
+        *,
+        max_per_bucket: int,
+    ) -> list[tuple[float, ContentMetadata, str]]:
+        if limit <= 0:
+            return []
+        bucket_counts: Counter[str] = Counter()
+        selected_rows: list[tuple[float, ContentMetadata, str]] = []
+        deferred: list[tuple[float, ContentMetadata, str]] = []
+
+        for row in rows:
+            if len(selected_rows) >= limit:
                 break
-            selected.append((item, reason))
+            bucket = self._diversity_bucket(row[1])
+            if bucket_counts[bucket] >= max_per_bucket:
+                deferred.append(row)
+                continue
+            selected_rows.append(row)
+            bucket_counts[bucket] += 1
 
-        return selected[:limit]
+        for row in deferred:
+            if len(selected_rows) >= limit:
+                break
+            selected_rows.append(row)
+
+        return selected_rows[:limit]
+
+    def _diversity_bucket(self, item: ContentMetadata) -> str:
+        if item.type == "music":
+            artist, album = self._music_identity(item)
+            return f"music:{album or artist or item.ext_id}"
+        genres = sorted(self._normalized_genres(item))
+        if genres:
+            return f"{item.type}:{genres[0]}"
+        return f"{item.type}:{item.ext_id}"
+
+    @staticmethod
+    def _doc_ref(item: ContentMetadata) -> str:
+        return (
+            getattr(item, "content_key", None)
+            or make_content_key(item.type, item.ext_id)
+            or item.ext_id
+        )
 
     def _candidate_limit(self, limit: int) -> int:
         multiplier = max(20, settings.ML_VECTOR_SEARCH_MULTIPLIER)
@@ -146,6 +274,95 @@ class RecommenderEngine:
             max(limit * multiplier, 250),
             self.MAX_RECOMMENDATION_CANDIDATES,
         )
+
+    def _candidate_types(self, content_type: Optional[str]) -> list[str]:
+        if content_type and content_type != "all":
+            return [content_type]
+        return list(self.CONTENT_TYPES)
+
+    def _per_type_candidate_limit(
+        self,
+        content_type: Optional[str],
+        candidate_limit: int,
+    ) -> int:
+        if content_type and content_type != "all":
+            return candidate_limit
+        return max(80, candidate_limit // len(self.CONTENT_TYPES))
+
+    async def _candidate_scores(
+        self,
+        query_vector: list[float],
+        target_dim: int,
+        content_type: Optional[str],
+        candidate_limit: int,
+        exclude_refs: set[str] | None = None,
+    ) -> list[tuple[ContentMetadata, float]]:
+        if settings.ML_VECTOR_INDEX_ENABLED:
+            return await self._candidate_scores_from_index(
+                query_vector,
+                content_type,
+                candidate_limit,
+                exclude_refs=exclude_refs,
+            )
+        return await self._candidate_scores_from_mongo(
+            query_vector,
+            target_dim,
+            content_type,
+            candidate_limit,
+            exclude_refs=exclude_refs,
+        )
+
+    async def _candidate_scores_from_index(
+        self,
+        query_vector: list[float],
+        content_type: Optional[str],
+        candidate_limit: int,
+        exclude_refs: set[str] | None = None,
+    ) -> list[tuple[ContentMetadata, float]]:
+        results: list[tuple[ContentMetadata, float]] = []
+        per_type_limit = self._per_type_candidate_limit(content_type, candidate_limit)
+        for current_type in self._candidate_types(content_type):
+            matches = await vector_index.search(
+                query_vector,
+                content_type=current_type,
+                limit=per_type_limit,
+                exclude_refs=exclude_refs,
+            )
+            results.extend((match.item, match.score) for match in matches)
+        return results
+
+    async def _candidate_scores_from_mongo(
+        self,
+        query_vector: list[float],
+        target_dim: int,
+        content_type: Optional[str],
+        candidate_limit: int,
+        exclude_refs: set[str] | None = None,
+    ) -> list[tuple[ContentMetadata, float]]:
+        results: list[tuple[ContentMetadata, float]] = []
+        excluded = exclude_refs or set()
+        per_type_limit = self._per_type_candidate_limit(content_type, candidate_limit)
+
+        for current_type in self._candidate_types(content_type):
+            query_filter: dict[str, object] = {
+                "features_vector.0": {"$exists": True},
+                "vector_dim": target_dim,
+                "type": current_type,
+            }
+            candidates = await ContentMetadata.find(query_filter).limit(per_type_limit).to_list()
+            for item in candidates:
+                item_ref = self._doc_ref(item)
+                if item_ref in excluded or item.ext_id in excluded:
+                    continue
+                if not item.features_vector or len(item.features_vector) != target_dim:
+                    continue
+                similarity_score = self.similarity.calculate_cosine_similarity(
+                    query_vector,
+                    item.features_vector,
+                )
+                results.append((item, similarity_score))
+
+        return results
 
     @staticmethod
     def _interest_score(
@@ -199,36 +416,13 @@ class RecommenderEngine:
             return []
 
         profile_vector = np.mean(compatible_vectors, axis=0).tolist()
-        candidates_filter: dict[str, object] = {
-            "features_vector.0": {"$exists": True},
-            "vector_dim": target_dim,
-        }
-        if content_type and content_type != "all":
-            candidates_filter["type"] = content_type
         candidate_limit = self._candidate_limit(limit)
-        candidate_scores: list[tuple[ContentMetadata, float]]
-        if settings.ML_VECTOR_INDEX_ENABLED:
-            matches = await vector_index.search(
-                profile_vector,
-                content_type=content_type or "all",
-                limit=candidate_limit,
-            )
-            candidate_scores = [(match.item, match.score) for match in matches]
-        else:
-            candidates = (
-                await ContentMetadata.find(candidates_filter)
-                .limit(candidate_limit)
-                .to_list()
-            )
-            candidate_scores = []
-            for item in candidates:
-                if not item.features_vector or len(item.features_vector) != target_dim:
-                    continue
-                similarity_score = self.similarity.calculate_cosine_similarity(
-                    profile_vector,
-                    item.features_vector,
-                )
-                candidate_scores.append((item, similarity_score))
+        candidate_scores = await self._candidate_scores(
+            profile_vector,
+            target_dim,
+            content_type,
+            candidate_limit,
+        )
 
         interest_counter: Counter[str] = Counter(clean_tags)
         scored_results: list[tuple[float, ContentMetadata, str]] = []
@@ -391,6 +585,8 @@ class RecommenderEngine:
         weighted_vectors = []
         vector_dims: Counter[int] = Counter()
         profile_genres: Counter[str] = Counter()
+        profile_artists: Counter[str] = Counter()
+        profile_albums: Counter[str] = Counter()
         profile_titles: list[str] = []
         for doc in interaction_docs:
             if not doc.features_vector:
@@ -410,6 +606,12 @@ class RecommenderEngine:
             weighted_vectors.append((np.array(doc.features_vector), weight))
             for genre in self._normalized_genres(doc):
                 profile_genres[genre] += weight
+            if doc.type == "music":
+                artist, album = self._music_identity(doc)
+                if artist:
+                    profile_artists[artist] += weight
+                if album:
+                    profile_albums[album] += weight
             if doc.title and len(profile_titles) < 3:
                 profile_titles.append(doc.title)
 
@@ -444,51 +646,19 @@ class RecommenderEngine:
             np.sum(compatible_weighted_vectors, axis=0) / total_weight
         ).tolist()
 
-        # Exclude already seen content and skip docs without vectors.
-        candidates_filter: dict[str, object] = {
-            "features_vector.0": {"$exists": True},
-            "vector_dim": target_dim,
-        }
-        if not supports_content_key:
-            excluded_ext_ids = [
-                split_content_key(ref)[1] if split_content_key(ref)[1] else ref
-                for ref in interaction_weight_by_ref.keys()
-            ]
-            candidates_filter["ext_id"] = {"$nin": excluded_ext_ids}
-        if content_type and content_type != "all":
-            candidates_filter["type"] = content_type
         candidate_limit = self._candidate_limit(limit)
 
         seen_refs = set(interaction_weight_by_ref.keys())
         scored_results: list[tuple[float, ContentMetadata, str]] = []
         skipped_candidates_mismatch = 0
         search_mode = "vector_index" if settings.ML_VECTOR_INDEX_ENABLED else "mongo_scan"
-        if settings.ML_VECTOR_INDEX_ENABLED:
-            matches = await vector_index.search(
-                user_profile_vector,
-                content_type=content_type or "all",
-                limit=candidate_limit,
-                exclude_refs=seen_refs,
-            )
-            candidate_scores = [(match.item, match.score) for match in matches]
-        else:
-            candidates = (
-                await ContentMetadata.find(candidates_filter)
-                .limit(candidate_limit)
-                .to_list()
-            )
-            candidate_scores = []
-            for item in candidates:
-                if not item.features_vector:
-                    continue
-                if len(item.features_vector) != target_dim:
-                    skipped_candidates_mismatch += 1
-                    continue
-                similarity_score = self.similarity.calculate_cosine_similarity(
-                    user_profile_vector,
-                    item.features_vector,
-                )
-                candidate_scores.append((item, similarity_score))
+        candidate_scores = await self._candidate_scores(
+            user_profile_vector,
+            target_dim,
+            content_type,
+            candidate_limit,
+            exclude_refs=seen_refs,
+        )
 
         for item, similarity_score in candidate_scores:
             item_ref = (
@@ -511,6 +681,12 @@ class RecommenderEngine:
                 rating_score,
                 genre_overlap,
             )
+            if item.type == "music":
+                artist, album = self._music_identity(item)
+                if artist and artist in profile_artists:
+                    hybrid_score += min(profile_artists[artist], 3.0) * 0.035
+                if album and album in profile_albums:
+                    hybrid_score += min(profile_albums[album], 2.0) * 0.02
             scored_results.append(
                 (
                     hybrid_score,
@@ -520,6 +696,7 @@ class RecommenderEngine:
                         profile_genres,
                         profile_titles,
                         interest_tags,
+                        profile_artists=profile_artists,
                     ),
                 )
             )

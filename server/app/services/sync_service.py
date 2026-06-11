@@ -59,6 +59,11 @@ class ContentSyncService:
         doc.rating = item.rating or 0.0
         doc.release_date = item.release_date
         doc.genres = item.genres
+        doc.album_id = item.album_id
+        doc.album_title = item.album_title
+        doc.artist_name = item.artist_name
+        doc.preview_url = item.preview_url
+        doc.external_url = item.external_url
 
     async def persist_items(self, items: Iterable[UnifiedContent]) -> int:
         item_list = list(items)
@@ -93,6 +98,19 @@ class ContentSyncService:
                     "genres": item.genres,
                     "features_vector": [],
                 }
+                payload.update(
+                    {
+                        key: value
+                        for key, value in {
+                            "album_id": item.album_id,
+                            "album_title": item.album_title,
+                            "artist_name": item.artist_name,
+                            "preview_url": item.preview_url,
+                            "external_url": item.external_url,
+                        }.items()
+                        if value is not None
+                    }
+                )
                 if supports_content_key:
                     payload["content_key"] = content_key
                 doc = ContentMetadata(**payload)

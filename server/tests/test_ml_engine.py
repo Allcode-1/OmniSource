@@ -202,6 +202,31 @@ async def test_get_recommendations_scores_and_sorts_candidates(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
+async def test_get_recommendations_all_balances_content_types(monkeypatch) -> None:
+    _FakeInteractionModel._rows = [
+        _FakeInteractionDoc(user_id="u1", ext_id="seed1", type="like", weight=1.0),
+    ]
+    _FakeContentMetadata._docs = {
+        "seed1": _FakeContentDoc(ext_id="seed1", type="movie", title="Seed", features_vector=[1.0, 0.0], rating=8.0),
+        "m1": _FakeContentDoc(ext_id="m1", type="movie", title="Movie 1", features_vector=[1.0, 0.0], rating=9.0),
+        "m2": _FakeContentDoc(ext_id="m2", type="movie", title="Movie 2", features_vector=[1.0, 0.0], rating=8.5),
+        "s1": _FakeContentDoc(ext_id="s1", type="music", title="Song 1", features_vector=[1.0, 0.0], rating=8.0),
+        "b1": _FakeContentDoc(ext_id="b1", type="book", title="Book 1", features_vector=[1.0, 0.0], rating=8.0),
+    }
+    _patch_common(monkeypatch)
+    engine = RecommenderEngine()
+
+    monkeypatch.setattr(
+        engine.similarity,
+        "calculate_cosine_similarity",
+        lambda left, right: 1.0,
+    )
+
+    result = await engine.get_recommendations("u1", content_type="all", limit=3)
+    assert {item.type for item in result} == {"movie", "music", "book"}
+
+
+@pytest.mark.asyncio
 async def test_get_recommendations_skips_dimension_mismatch_vectors(monkeypatch) -> None:
     _FakeInteractionModel._rows = [
         _FakeInteractionDoc(user_id="u1", ext_id="seed1", type="like", weight=1.0),

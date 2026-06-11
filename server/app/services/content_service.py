@@ -1,7 +1,6 @@
 import asyncio
 import re
 from typing import List, Dict, Any, Awaitable, Callable, TypeVar
-from urllib.parse import quote_plus
 
 import httpx
 from pymongo.errors import DuplicateKeyError

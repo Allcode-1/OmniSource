@@ -466,6 +466,12 @@ class _SmartLibraryScreenState extends State<SmartLibraryScreen> {
         return CupertinoIcons.music_note_list;
       case 'open_detail':
         return CupertinoIcons.rectangle_stack_fill;
+      case 'preview_open':
+        return CupertinoIcons.play_rectangle;
+      case 'preview_play':
+        return CupertinoIcons.play_fill;
+      case 'external_open':
+        return CupertinoIcons.arrow_up_right;
       case 'search':
         return CupertinoIcons.search;
       default:

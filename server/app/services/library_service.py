@@ -38,6 +38,11 @@ class LibraryService:
             rating=doc.rating or 0.0,
             genres=doc.genres or [],
             release_date=doc.release_date,
+            album_id=getattr(doc, "album_id", None),
+            album_title=getattr(doc, "album_title", None),
+            artist_name=getattr(doc, "artist_name", None),
+            preview_url=getattr(doc, "preview_url", None),
+            external_url=getattr(doc, "external_url", None),
         )
 
     @staticmethod
@@ -129,6 +134,19 @@ class LibraryService:
             if vector
             else None,
         }
+        payload.update(
+            {
+                key: value
+                for key, value in {
+                    "album_id": content.album_id,
+                    "album_title": content.album_title,
+                    "artist_name": content.artist_name,
+                    "preview_url": content.preview_url,
+                    "external_url": content.external_url,
+                }.items()
+                if value is not None
+            }
+        )
         if supports_content_key and content_key:
             payload["content_key"] = content_key
         meta = ContentMetadata(**payload)

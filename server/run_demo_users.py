@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import random
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from app.auth.utils import hash_password
@@ -18,15 +19,27 @@ configure_logging()
 logger = get_logger(__name__)
 
 
+CONTENT_TYPES = ("movie", "music", "book")
+
+
+@dataclass(frozen=True)
+class InterestProfile:
+    name: str
+    interests: list[str]
+    type_mix: dict[str, float]
+
+
 INTEREST_PROFILES = [
-    ["action", "thriller", "rock"],
-    ["fantasy", "animation", "family"],
-    ["romance", "pop", "drama"],
-    ["history", "war", "classical"],
-    ["sci-fi", "cyberpunk", "electronic"],
-    ["mystery", "crime", "jazz"],
-    ["comedy", "dance", "adventure"],
-    ["horror", "metal", "dark"],
+    InterestProfile("night-drive", ["sci-fi", "cyberpunk", "electronic"], {"music": 0.56, "movie": 0.34, "book": 0.10}),
+    InterestProfile("cinephile", ["action", "thriller", "crime"], {"movie": 0.68, "music": 0.18, "book": 0.14}),
+    InterestProfile("reader", ["fantasy", "magic", "adventure"], {"book": 0.62, "movie": 0.25, "music": 0.13}),
+    InterestProfile("soft-pop", ["romance", "pop", "drama"], {"music": 0.48, "book": 0.28, "movie": 0.24}),
+    InterestProfile("history", ["history", "war", "documentary"], {"book": 0.44, "movie": 0.40, "music": 0.16}),
+    InterestProfile("mystery", ["mystery", "detective", "jazz"], {"movie": 0.42, "book": 0.38, "music": 0.20}),
+    InterestProfile("weekend", ["comedy", "family", "animation"], {"movie": 0.52, "music": 0.30, "book": 0.18}),
+    InterestProfile("dark", ["horror", "metal", "dark"], {"music": 0.46, "movie": 0.42, "book": 0.12}),
+    InterestProfile("maker", ["technology", "science", "business"], {"book": 0.50, "music": 0.28, "movie": 0.22}),
+    InterestProfile("mixed", ["adventure", "indie", "coming-of-age"], {"movie": 0.34, "music": 0.34, "book": 0.32}),
 ]
 
 
@@ -38,6 +51,10 @@ def _event_weight(event_type: str) -> float:
     return {
         "view": 0.2,
         "open_detail": 0.5,
+        "preview_open": 0.65,
+        "preview_play": 1.15,
+        "external_open": 0.55,
+        "dwell_time": 0.3,
         "like": 1.0,
         "playlist_add": 0.8,
     }.get(event_type, 0.1)
@@ -55,6 +72,60 @@ def _matches(doc: ContentMetadata, interests: list[str]) -> bool:
     genres = {genre.lower() for genre in doc.genres or []}
     text = f"{doc.title} {doc.subtitle or ''} {doc.description or ''}".lower()
     return any(interest in genres or interest in text for interest in interests)
+
+
+def _type_counts(total: int, type_mix: dict[str, float]) -> dict[str, int]:
+    remaining = total
+    counts: dict[str, int] = {}
+    for content_type in CONTENT_TYPES[:-1]:
+        count = min(remaining, round(total * type_mix.get(content_type, 0.0)))
+        counts[content_type] = max(0, count)
+        remaining -= counts[content_type]
+    counts[CONTENT_TYPES[-1]] = max(0, remaining)
+    return counts
+
+
+def _sample_profile_docs(
+    docs: list[ContentMetadata],
+    profile: InterestProfile,
+    *,
+    total: int,
+    rng: random.Random,
+) -> list[ContentMetadata]:
+    selected: list[ContentMetadata] = []
+    selected_refs: set[str] = set()
+    counts = _type_counts(total, profile.type_mix)
+
+    for content_type, count in counts.items():
+        if count <= 0:
+            continue
+        typed_docs = [doc for doc in docs if doc.type == content_type]
+        preferred = [doc for doc in typed_docs if _matches(doc, profile.interests)]
+        pool = preferred or typed_docs
+        if not pool:
+            continue
+        sample_size = min(count, len(pool))
+        for doc in rng.sample(pool, k=sample_size):
+            ref = _doc_ref(doc)
+            if ref in selected_refs:
+                continue
+            selected_refs.add(ref)
+            selected.append(doc)
+
+    if len(selected) < total:
+        remainder = [
+            doc
+            for doc in docs
+            if _doc_ref(doc) not in selected_refs
+            and (_matches(doc, profile.interests) or doc.type in profile.type_mix)
+        ]
+        if remainder:
+            for doc in rng.sample(remainder, k=min(total - len(selected), len(remainder))):
+                selected_refs.add(_doc_ref(doc))
+                selected.append(doc)
+
+    rng.shuffle(selected)
+    return selected[:total]
 
 
 async def _reset_demo_users() -> None:
@@ -94,41 +165,72 @@ async def _seed_interactions(
     user: User,
     docs: list[ContentMetadata],
     *,
+    profile: InterestProfile,
     interactions_per_user: int,
     rng: random.Random,
 ) -> int:
     await Interaction.find({"user_id": str(user.id)}).delete()
-    preferred = [doc for doc in docs if _matches(doc, user.interests)]
-    pool = preferred or docs
-    if not pool:
+    selected = _sample_profile_docs(
+        docs,
+        profile,
+        total=interactions_per_user,
+        rng=rng,
+    )
+    if not selected:
         return 0
 
-    selected = rng.sample(pool, k=min(interactions_per_user, len(pool)))
     now = datetime.now(timezone.utc)
     created = 0
     for offset, doc in enumerate(reversed(selected)):
         base_time = now - timedelta(days=len(selected) - offset, hours=rng.randint(0, 12))
         events = ["view", "open_detail"]
+        if offset % 3 != 1:
+            events.append("preview_open")
+        if doc.type in {"movie", "music"} and offset % 3 != 2:
+            events.append("preview_play")
+        if doc.type == "book" and offset % 4 == 0:
+            events.append("external_open")
         if offset % 2 == 0:
             events.append("like")
         if offset % 7 == 0:
             events.append("playlist_add")
+        if offset % 3 == 0:
+            events.append("dwell_time")
 
         for event_index, event_type in enumerate(events):
+            seconds = rng.randint(18, 140)
+            weight = _event_weight(event_type)
+            meta = {
+                "title": doc.title,
+                "genres": doc.genres,
+                "rating": doc.rating,
+                "ranking_variant": user.ranking_variant,
+                "profile": profile.name,
+                "demo": True,
+            }
+            if event_type == "dwell_time":
+                meta["seconds"] = seconds
+                weight = max(0.1, seconds / 60)
+            if event_type.startswith("preview"):
+                meta["provider"] = "demo"
+                meta["preview_type"] = (
+                    "audio"
+                    if doc.type == "music"
+                    else "external"
+                    if doc.type == "book"
+                    else "video"
+                )
+            if event_type == "external_open":
+                meta["target"] = "source"
+
             await Interaction(
                 user_id=str(user.id),
                 ext_id=doc.ext_id,
                 content_key=_doc_ref(doc),
                 content_type=doc.type,
                 type=event_type,
-                weight=_event_weight(event_type),
-                meta={
-                    "title": doc.title,
-                    "genres": doc.genres,
-                    "rating": doc.rating,
-                    "ranking_variant": user.ranking_variant,
-                    "demo": True,
-                },
+                weight=weight,
+                meta=meta,
                 created_at=base_time + timedelta(minutes=event_index * 7),
             ).insert()
             created += 1
@@ -144,11 +246,12 @@ async def main(args: argparse.Namespace) -> None:
     rng = random.Random(args.seed)
     total_events = 0
     for index in range(1, args.users + 1):
-        interests = INTEREST_PROFILES[(index - 1) % len(INTEREST_PROFILES)]
-        user = await _upsert_user(index, interests)
+        profile = INTEREST_PROFILES[(index - 1) % len(INTEREST_PROFILES)]
+        user = await _upsert_user(index, profile.interests)
         total_events += await _seed_interactions(
             user,
             docs,
+            profile=profile,
             interactions_per_user=args.interactions,
             rng=rng,
         )
