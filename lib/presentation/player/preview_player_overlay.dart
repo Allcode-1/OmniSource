@@ -1,10 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../widgets/content_artwork.dart';
 import 'preview_player_controller.dart';
+import 'web_youtube_embed.dart';
 
 class PreviewPlayerOverlay extends StatefulWidget {
   final Widget child;
@@ -194,9 +195,9 @@ class _VideoMiniPlayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final youtube = controller.youtubeController;
+    final videoId = controller.videoId;
     final preview = controller.preview;
-    if (youtube == null || preview == null) return const SizedBox.shrink();
+    if (videoId == null || preview == null) return const SizedBox.shrink();
 
     final media = MediaQuery.of(context);
     final width = media.size.width < 420 ? media.size.width - 28 : 330.0;
@@ -232,9 +233,24 @@ class _VideoMiniPlayer extends StatelessWidget {
               children: [
                 SizedBox(
                   height: width / (16 / 9),
-                  child: YoutubePlayer(
-                    controller: youtube,
-                    aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(
+                        'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Container(
+                          color: Colors.black,
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            CupertinoIcons.play_rectangle_fill,
+                            color: AppTheme.ink,
+                            size: 34,
+                          ),
+                        ),
+                      ),
+                      WebYoutubeEmbed(videoId: videoId),
+                    ],
                   ),
                 ),
                 SizedBox(
@@ -257,6 +273,17 @@ class _VideoMiniPlayer extends StatelessWidget {
                       _MiniIconButton(
                         icon: CupertinoIcons.xmark,
                         onTap: controller.closePlayer,
+                      ),
+                      _MiniIconButton(
+                        icon: CupertinoIcons.arrow_up_right,
+                        onTap: () async {
+                          final uri = Uri.tryParse(preview.url);
+                          if (uri == null) return;
+                          await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                        },
                       ),
                       const SizedBox(width: 4),
                     ],

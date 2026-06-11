@@ -1,7 +1,5 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart'
-    hide PlayerState;
 
 import '../../domain/entities/content_preview.dart';
 import '../../domain/entities/unified_content.dart';
@@ -37,7 +35,7 @@ class PreviewPlayerController extends ChangeNotifier {
   PreviewPlayerMode mode = PreviewPlayerMode.hidden;
   UnifiedContent? item;
   ContentPreview? preview;
-  YoutubePlayerController? youtubeController;
+  String? videoId;
   bool isAudioPlaying = false;
   bool _audioStarted = false;
   Duration audioPosition = Duration.zero;
@@ -86,17 +84,7 @@ class PreviewPlayerController extends ChangeNotifier {
     await _closeYoutube();
     this.item = item;
     this.preview = preview;
-    youtubeController = YoutubePlayerController.fromVideoId(
-      videoId: videoId,
-      autoPlay: false,
-      params: const YoutubePlayerParams(
-        showControls: true,
-        showFullscreenButton: true,
-        playsInline: true,
-        enableCaption: true,
-        strictRelatedVideos: true,
-      ),
-    );
+    this.videoId = videoId;
     mode = PreviewPlayerMode.video;
     notifyListeners();
     return true;
@@ -116,11 +104,7 @@ class PreviewPlayerController extends ChangeNotifier {
   }
 
   Future<void> _closeYoutube() async {
-    final controller = youtubeController;
-    youtubeController = null;
-    if (controller != null) {
-      await controller.close();
-    }
+    videoId = null;
   }
 
   String? _videoIdFor(ContentPreview preview) {
@@ -133,8 +117,6 @@ class PreviewPlayerController extends ChangeNotifier {
     for (final url in urls) {
       final manualId = _extractYoutubeId(url);
       if (manualId != null) return manualId;
-      final convertedId = YoutubePlayerController.convertUrlToId(url);
-      if (convertedId != null) return convertedId;
     }
     return null;
   }
