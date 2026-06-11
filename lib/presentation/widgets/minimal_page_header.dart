@@ -53,17 +53,19 @@ class MinimalPageHeader extends StatelessWidget {
 class MinimalTypeTabs extends StatelessWidget {
   final String activeType;
   final ValueChanged<String> onChanged;
+  final bool includeAll;
 
   const MinimalTypeTabs({
     super.key,
     required this.activeType,
     required this.onChanged,
+    this.includeAll = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    const tabs = [
-      ('All', 'all'),
+    final tabs = [
+      if (includeAll) ('All', 'all'),
       ('Movies', 'movie'),
       ('Music', 'music'),
       ('Books', 'book'),

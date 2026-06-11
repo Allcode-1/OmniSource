@@ -1,8 +1,12 @@
 import asyncio
+import re
 from typing import List, Dict, Any, Awaitable, Callable, TypeVar
 from urllib.parse import quote_plus
+
+import httpx
 from pymongo.errors import DuplicateKeyError
 
+from app.core.config import settings
 from app.core.content_keys import make_content_key
 from app.integrations.tmdb import TMDBClient
 from app.integrations.google_books import GoogleBooksClient
@@ -780,7 +784,21 @@ class ContentService:
                     external_url=external_url,
                     is_playable=True,
                 )
-            query = quote_plus(f"{artist_text} {track_title}".strip())
+            query_text = f"{artist_text} {track_title}".strip()
+            youtube_id = await self._find_youtube_video_id(query_text)
+            if youtube_id:
+                return ContentPreview(
+                    content_type="music",
+                    external_id=external_id,
+                    provider="YouTube",
+                    preview_type="video",
+                    title=track_title,
+                    url=f"https://www.youtube.com/watch?v={youtube_id}",
+                    embed_url=f"https://www.youtube.com/embed/{youtube_id}",
+                    external_url=external_url,
+                    is_playable=True,
+                )
+            query = quote_plus(query_text)
             if query:
                 return ContentPreview(
                     content_type="music",
@@ -793,9 +811,22 @@ class ContentService:
                     is_playable=False,
                 )
 
-        query = quote_plus(" ".join(part for part in [subtitle, title] if part))
-        if not query:
+        query_text = " ".join(part for part in [subtitle, title] if part)
+        if not query_text:
             return None
+        youtube_id = await self._find_youtube_video_id(query_text)
+        if youtube_id:
+            return ContentPreview(
+                content_type="music",
+                external_id=external_id,
+                provider="YouTube",
+                preview_type="video",
+                title=title or "Music preview",
+                url=f"https://www.youtube.com/watch?v={youtube_id}",
+                embed_url=f"https://www.youtube.com/embed/{youtube_id}",
+                is_playable=True,
+            )
+        query = quote_plus(query_text)
         return ContentPreview(
             content_type="music",
             external_id=external_id,
@@ -805,6 +836,52 @@ class ContentService:
             url=f"https://www.youtube.com/results?search_query={query}",
             is_playable=False,
         )
+
+    async def _find_youtube_video_id(self, query: str) -> str | None:
+        normalized = " ".join(query.split()).strip()
+        if not normalized:
+            return None
+
+        try:
+            async with httpx.AsyncClient(
+                proxy=settings.SPOTIFY_PROXY_URL,
+                timeout=httpx.Timeout(6.0, connect=2.0, read=6.0),
+                follow_redirects=True,
+            ) as client:
+                response = await client.get(
+                    "https://www.youtube.com/results",
+                    params={"search_query": normalized},
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 "
+                            "Mobile/15E148 Safari/604.1"
+                        )
+                    },
+                )
+        except Exception as exc:
+            logger.info(
+                "YouTube preview lookup failed query=%s error=%s",
+                normalized,
+                type(exc).__name__,
+            )
+            return None
+
+        if response.status_code != 200:
+            logger.info(
+                "YouTube preview lookup returned status=%s query=%s",
+                response.status_code,
+                normalized,
+            )
+            return None
+
+        seen: set[str] = set()
+        for video_id in re.findall(r'"videoId":"([A-Za-z0-9_-]{11})"', response.text):
+            if video_id in seen:
+                continue
+            seen.add(video_id)
+            return video_id
+        return None
 
     async def _get_book_preview(
         self,

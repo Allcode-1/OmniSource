@@ -20,7 +20,7 @@ class ForYouHubScreen extends StatefulWidget {
 }
 
 class _ForYouHubScreenState extends State<ForYouHubScreen> {
-  String _activeType = 'all';
+  String _activeType = 'music';
   bool _isLoading = true;
   String _error = '';
   List<UnifiedContent> _items = const [];
@@ -46,7 +46,7 @@ class _ForYouHubScreenState extends State<ForYouHubScreen> {
   String _typeForCategory(ContentCategory category) {
     switch (category) {
       case ContentCategory.all:
-        return 'all';
+        return 'music';
       case ContentCategory.movie:
         return 'movie';
       case ContentCategory.music:
@@ -111,6 +111,7 @@ class _ForYouHubScreenState extends State<ForYouHubScreen> {
               child: MinimalTypeTabs(
                 activeType: _activeType,
                 onChanged: _setType,
+                includeAll: false,
               ),
             ),
             SliverToBoxAdapter(

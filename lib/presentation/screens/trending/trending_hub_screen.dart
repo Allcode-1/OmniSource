@@ -19,7 +19,7 @@ class TrendingHubScreen extends StatefulWidget {
 }
 
 class _TrendingHubScreenState extends State<TrendingHubScreen> {
-  String _activeType = 'all';
+  String _activeType = 'music';
   final Map<String, List<UnifiedContent>> _cache = {};
   bool _isLoading = true;
   String _error = '';
@@ -39,7 +39,7 @@ class _TrendingHubScreenState extends State<TrendingHubScreen> {
   String _typeForCategory(ContentCategory category) {
     switch (category) {
       case ContentCategory.all:
-        return 'all';
+        return 'music';
       case ContentCategory.movie:
         return 'movie';
       case ContentCategory.music:
@@ -111,6 +111,7 @@ class _TrendingHubScreenState extends State<TrendingHubScreen> {
               child: MinimalTypeTabs(
                 activeType: _activeType,
                 onChanged: _setType,
+                includeAll: false,
               ),
             ),
             SliverToBoxAdapter(

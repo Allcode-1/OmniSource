@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -14,6 +13,7 @@ import '../../../domain/repositories/analytics_repository.dart';
 import '../../../domain/repositories/content_repository.dart';
 import '../../bloc/library/library_cubit.dart';
 import '../../bloc/library/library_state.dart';
+import '../../player/preview_player_controller.dart';
 import '../../widgets/content_artwork.dart';
 import '../search/search_grid_card.dart';
 
@@ -35,13 +35,11 @@ class _DetailScreenState extends State<DetailScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   late final DateTime _openedAt;
-  late final AudioPlayer _audioPlayer;
 
   bool _loadingRelated = true;
   String _relatedError = '';
   List<UnifiedContent> _related = const [];
   bool _loadingPreview = false;
-  bool _previewPlaying = false;
   ContentPreview? _preview;
 
   UnifiedContent get content => widget.content;
@@ -53,10 +51,6 @@ class _DetailScreenState extends State<DetailScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _audioPlayer = AudioPlayer();
-    _audioPlayer.onPlayerComplete.listen((_) {
-      if (mounted) setState(() => _previewPlaying = false);
-    });
     _openedAt = DateTime.now();
     _trackOpenDetail();
     _loadRelated();
@@ -65,7 +59,6 @@ class _DetailScreenState extends State<DetailScreen>
   @override
   void dispose() {
     _tabController.dispose();
-    _audioPlayer.dispose();
     _trackDwellTime();
     super.dispose();
   }
@@ -431,17 +424,29 @@ class _DetailScreenState extends State<DetailScreen>
       ).showSnackBar(const SnackBar(content: Text('Preview is not available')));
       return;
     }
-    _showPreviewSheet(preview);
-  }
 
-  Future<void> _toggleAudioPreview(String url) async {
-    if (_previewPlaying) {
-      await _audioPlayer.pause();
-      if (mounted) setState(() => _previewPlaying = false);
+    if (preview.contentType == 'music' && preview.previewType == 'audio') {
+      await PreviewPlayerController.instance.showAudio(
+        item: content,
+        preview: preview,
+      );
       return;
     }
-    await _audioPlayer.play(UrlSource(url));
-    if (mounted) setState(() => _previewPlaying = true);
+
+    if (preview.previewType == 'video') {
+      final shown = await PreviewPlayerController.instance.showVideo(
+        item: content,
+        preview: preview,
+      );
+      if (shown) return;
+    }
+
+    if (preview.contentType == 'book') {
+      await _openUrl(preview.url, fallbackMessage: 'Book preview link copied');
+      return;
+    }
+
+    _showPreviewSheet(preview);
   }
 
   Future<void> _showPreviewSheet(ContentPreview preview) async {
@@ -513,15 +518,14 @@ class _DetailScreenState extends State<DetailScreen>
                     const SizedBox(height: 18),
                     if (preview.previewType == 'audio')
                       _PreviewButton(
-                        icon: _previewPlaying
-                            ? CupertinoIcons.pause_fill
-                            : CupertinoIcons.play_fill,
-                        label: _previewPlaying
-                            ? 'Pause Preview'
-                            : 'Play Preview',
+                        icon: CupertinoIcons.play_fill,
+                        label: 'Listen Preview',
                         onTap: () async {
-                          await _toggleAudioPreview(preview.url);
-                          if (ctx.mounted) setSheetState(() {});
+                          Navigator.pop(ctx);
+                          await PreviewPlayerController.instance.showAudio(
+                            item: content,
+                            preview: preview,
+                          );
                         },
                       )
                     else
@@ -547,10 +551,6 @@ class _DetailScreenState extends State<DetailScreen>
         );
       },
     );
-    if (_previewPlaying) {
-      await _audioPlayer.stop();
-      if (mounted) setState(() => _previewPlaying = false);
-    }
   }
 
   @override

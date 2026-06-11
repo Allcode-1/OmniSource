@@ -282,6 +282,37 @@ async def test_get_preview_uses_spotify_audio_url(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_preview_uses_youtube_video_when_spotify_audio_missing(monkeypatch) -> None:
+    service = ContentService()
+
+    async def fake_track(track_id: str):
+        assert track_id == "track-1"
+        return {
+            "name": "Song",
+            "preview_url": None,
+            "artists": [{"name": "Artist"}],
+            "external_urls": {"spotify": "https://open.spotify.com/track/track-1"},
+        }
+
+    async def fake_youtube_lookup(query: str):
+        assert query == "Artist Song"
+        return "abc123DEF45"
+
+    monkeypatch.setattr(service.spotify, "get_track", fake_track)
+    monkeypatch.setattr(service, "_find_youtube_video_id", fake_youtube_lookup)
+
+    preview = await service.get_preview("music", "track-1", title="Song")
+
+    assert preview is not None
+    assert preview.provider == "YouTube"
+    assert preview.preview_type == "video"
+    assert preview.url == "https://www.youtube.com/watch?v=abc123DEF45"
+    assert preview.embed_url == "https://www.youtube.com/embed/abc123DEF45"
+    assert preview.external_url == "https://open.spotify.com/track/track-1"
+    assert preview.is_playable is True
+
+
+@pytest.mark.asyncio
 async def test_get_preview_uses_google_books_reader_url(monkeypatch) -> None:
     service = ContentService()
 

@@ -35,8 +35,8 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
     ),
     _CollectionConfig(
       title: 'Mind Benders',
-      tags: ['mystery', 'mind-bending'],
-      type: 'all',
+      tags: ['mystery', 'psychological', 'surreal'],
+      type: 'movie',
       icon: CupertinoIcons.sparkles,
     ),
     _CollectionConfig(
@@ -51,7 +51,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
   bool _loading = true;
   bool _openedInitial = false;
   String _error = '';
-  String _activeType = 'all';
+  String _activeType = 'movie';
 
   String _contentKey(UnifiedContent item) => '${item.type}:${item.externalId}';
 
@@ -72,10 +72,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
       for (final collection in _collections) {
         final responses = await Future.wait(
           collection.tags.map(
-            (tag) => repo.getDeepResearch(
-              tag,
-              type: collection.type == 'all' ? null : collection.type,
-            ),
+            (tag) => repo.getDeepResearch(tag, type: collection.type),
           ),
         );
 
@@ -125,9 +122,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
   @override
   Widget build(BuildContext context) {
     final visible = _collections.where((collection) {
-      return _activeType == 'all' ||
-          collection.type == _activeType ||
-          collection.type == 'all';
+      return collection.type == _activeType;
     }).toList();
 
     return Scaffold(
@@ -148,6 +143,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
               child: MinimalTypeTabs(
                 activeType: _activeType,
                 onChanged: (type) => setState(() => _activeType = type),
+                includeAll: false,
               ),
             ),
             SliverToBoxAdapter(
@@ -216,8 +212,8 @@ class _CollectionTile extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        constraints: const BoxConstraints(minHeight: 96),
-        padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+        constraints: const BoxConstraints(minHeight: 120),
+        padding: const EdgeInsets.fromLTRB(16, 15, 16, 15),
         decoration: BoxDecoration(
           color: AppTheme.surfaceAlt,
           borderRadius: BorderRadius.circular(22),
@@ -227,7 +223,7 @@ class _CollectionTile extends StatelessWidget {
             _CollectionArtworkStack(
               items: items,
               fallbackIcon: collection.icon,
-              size: 70,
+              size: 88,
             ),
             const SizedBox(width: 15),
             Expanded(
@@ -241,7 +237,7 @@ class _CollectionTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: AppTheme.ink,
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: FontWeight.w600,
                       height: 1.1,
                     ),
@@ -253,7 +249,7 @@ class _CollectionTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: AppTheme.ink.withValues(alpha: 0.54),
-                      fontSize: 13,
+                      fontSize: 14,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -345,7 +341,6 @@ class _CollectionArtworkStack extends StatelessWidget {
 }
 
 String _collectionTypeLabel(String type) {
-  if (type == 'all') return 'Mixed';
   return contentTypeLabel(type);
 }
 

@@ -152,16 +152,17 @@ class _SettingsTopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => Navigator.maybePop(context),
-          child: SizedBox(
-            width: 46,
-            height: 46,
-            child: Icon(
-              CupertinoIcons.back,
-              color: AppTheme.ink.withValues(alpha: 0.94),
-              size: 28,
+        SizedBox(
+          width: 46,
+          height: 46,
+          child: IconButton(
+            onPressed: () => Navigator.maybePop(context),
+            icon: const Icon(CupertinoIcons.back, size: 28),
+            color: AppTheme.ink,
+            padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              backgroundColor: AppTheme.surfaceAlt,
+              shape: const CircleBorder(),
             ),
           ),
         ),

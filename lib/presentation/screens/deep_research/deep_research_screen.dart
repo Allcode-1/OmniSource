@@ -39,7 +39,7 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
   bool _isLoadingTags = true;
   bool _isLoadingResults = false;
   String _error = '';
-  String _activeType = 'all';
+  String _activeType = 'music';
   double _appBarOpacity = 1.0;
 
   @override
@@ -82,8 +82,8 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
       if (authState is AuthAuthenticated &&
           authState.user.interests.isNotEmpty) {
         _selectedTags.addAll(authState.user.interests.take(3));
-        _scheduleDeepResearch();
       }
+      _scheduleDeepResearch();
     } catch (e, st) {
       AppLogger.error(
         'Failed to load research tags',
@@ -134,7 +134,7 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
 
     try {
       final repository = context.read<ContentRepository>();
-      final type = selectedType == 'all' ? null : selectedType;
+      final type = selectedType;
 
       final responses = await Future.wait(
         seedTags.map((tag) async {
@@ -286,20 +286,6 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
                     ),
                   ),
                 )
-              else if (_selectedTags.isEmpty && _activeType == 'all')
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 120),
-                    child: Text(
-                      'Choose a tag or content type above to build a focused feed.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppTheme.ink.withValues(alpha: 0.42),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                )
               else if (displayResults.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -430,7 +416,6 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
 
   Widget _buildTypeFilters() {
     final filters = const [
-      ('All', 'all'),
       ('Movies', 'movie'),
       ('Music', 'music'),
       ('Books', 'book'),
@@ -670,8 +655,6 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
   }
 
   List<String> _seedTagsForType(String type) {
-    if (type == 'all') return const [];
-
     final available = _allTags.toSet();
     final seeds = switch (type) {
       'movie' => const ['action', 'drama', 'fantasy', 'mystery'],

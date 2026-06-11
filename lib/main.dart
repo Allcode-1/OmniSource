@@ -26,6 +26,7 @@ import 'presentation/bloc/auth/auth_state.dart';
 import 'presentation/bloc/home/home_cubit.dart';
 import 'presentation/bloc/search/search_cubit.dart';
 import 'presentation/bloc/library/library_cubit.dart';
+import 'presentation/player/preview_player_overlay.dart';
 
 // Screens
 import 'presentation/screens/auth/login_screen.dart';
@@ -107,7 +108,9 @@ class OmniSourceApp extends StatelessWidget {
                 decoration: useMainTheme
                     ? AppTheme.mainBackgroundDecoration
                     : const BoxDecoration(color: AppTheme.authBackground),
-                child: child ?? const SizedBox.shrink(),
+                child: PreviewPlayerOverlay(
+                  child: child ?? const SizedBox.shrink(),
+                ),
               ),
             );
           },

@@ -257,7 +257,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildCategoryTabs(BuildContext context, HomeState state) {
     const tabs = [
-      (ContentCategory.all, 'All'),
       (ContentCategory.movie, 'Movies'),
       (ContentCategory.music, 'Music'),
       (ContentCategory.book, 'Books'),
@@ -869,7 +868,7 @@ class _CollectionsRail extends StatelessWidget {
           _SectionHeader(title: 'Collections', onSeeAll: onSeeAll),
           const SizedBox(height: 14),
           SizedBox(
-            height: 122,
+            height: 144,
             child: ListView.separated(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(
@@ -910,8 +909,8 @@ class _CollectionCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 184,
-        padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+        width: 226,
+        padding: const EdgeInsets.fromLTRB(16, 15, 16, 15),
         decoration: BoxDecoration(
           color: AppTheme.surfaceAlt,
           borderRadius: BorderRadius.circular(18),
@@ -927,7 +926,7 @@ class _CollectionCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(13),
                 border: Border.all(color: AppTheme.ink.withValues(alpha: 0.06)),
               ),
-              child: Icon(item.icon, color: AppTheme.primary, size: 21),
+              child: Icon(item.icon, color: AppTheme.primary, size: 23),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -941,7 +940,7 @@ class _CollectionCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: AppTheme.ink,
-                      fontSize: 16,
+                      fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -952,7 +951,7 @@ class _CollectionCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: AppTheme.ink.withValues(alpha: 0.54),
-                      fontSize: 12,
+                      fontSize: 13,
                     ),
                   ),
                 ],
