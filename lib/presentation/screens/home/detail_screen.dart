@@ -452,6 +452,13 @@ class _DetailScreenState extends State<DetailScreen>
       if (shown) return;
     }
 
+    if (preview.contentType == 'music' &&
+        preview.previewType == 'external' &&
+        preview.provider == 'YouTube') {
+      await _openUrl(preview.url, fallbackMessage: 'YouTube link copied');
+      return;
+    }
+
     if (preview.contentType == 'book') {
       await _openUrl(preview.url, fallbackMessage: 'Book preview link copied');
       return;

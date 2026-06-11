@@ -887,10 +887,11 @@ class ContentService:
                         ),
                     },
                 )
+                candidate_ids: list[str] = []
                 if innertube_response.status_code == 200:
-                    video_id = self._first_youtube_video_id(innertube_response.text)
-                    if video_id:
-                        return video_id
+                    candidate_ids.extend(
+                        self._youtube_video_ids(innertube_response.text)
+                    )
                 else:
                     logger.info(
                         "YouTube innertube lookup returned status=%s query=%s",
@@ -917,18 +918,24 @@ class ContentService:
             )
             return None
 
-        if html_response.status_code != 200:
+        if html_response.status_code == 200:
+            candidate_ids.extend(self._youtube_video_ids(html_response.text))
+        else:
             logger.info(
                 "YouTube preview lookup returned status=%s query=%s",
                 html_response.status_code,
                 normalized,
             )
-            return None
 
-        return self._first_youtube_video_id(html_response.text)
+        for video_id in dict.fromkeys(candidate_ids).keys():
+            if await self._is_youtube_video_embeddable(video_id):
+                return video_id
+
+        return None
 
     @staticmethod
-    def _first_youtube_video_id(payload: str) -> str | None:
+    def _youtube_video_ids(payload: str, limit: int = 12) -> list[str]:
+        result: list[str] = []
         seen: set[str] = set()
         patterns = (
             r'"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"',
@@ -941,8 +948,63 @@ class ContentService:
                 if video_id in seen:
                     continue
                 seen.add(video_id)
-                return video_id
-        return None
+                result.append(video_id)
+                if len(result) >= limit:
+                    return result
+        return result
+
+    @classmethod
+    def _first_youtube_video_id(cls, payload: str) -> str | None:
+        ids = cls._youtube_video_ids(payload, limit=1)
+        return ids[0] if ids else None
+
+    async def _is_youtube_video_embeddable(self, video_id: str) -> bool:
+        try:
+            async with httpx.AsyncClient(
+                proxy=settings.SPOTIFY_PROXY_URL,
+                timeout=httpx.Timeout(4.0, connect=2.0, read=4.0),
+                follow_redirects=True,
+            ) as client:
+                response = await client.get(
+                    f"https://www.youtube.com/embed/{video_id}",
+                    params={
+                        "playsinline": "1",
+                        "origin": "http://5.42.108.117",
+                    },
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
+                            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 "
+                            "Mobile/15E148 Safari/604.1"
+                        )
+                    },
+                )
+        except Exception as exc:
+            logger.info(
+                "YouTube embed check failed video_id=%s error=%s",
+                video_id,
+                type(exc).__name__,
+            )
+            return False
+
+        if response.status_code != 200:
+            return False
+
+        payload = response.text
+        status_match = re.search(
+            r'previewPlayabilityStatus\\?":\{\\?"status\\?":\\?"([A-Z_]+)\\?"',
+            payload,
+        )
+        if status_match:
+            return status_match.group(1) == "OK" and (
+                'playableInEmbed\\":true' in payload
+                or '"playableInEmbed":true' in payload
+            )
+
+        return (
+            '"status":"OK"' in payload
+            and '"playableInEmbed":true' in payload
+        )
 
     async def _get_book_preview(
         self,
