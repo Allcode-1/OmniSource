@@ -47,9 +47,6 @@ class _HomeLayoutEditorScreenState extends State<HomeLayoutEditorScreen> {
 
   void _onReorder(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) {
-        newIndex -= 1;
-      }
       final moved = _orderedSections.removeAt(oldIndex);
       _orderedSections.insert(newIndex, moved);
     });
@@ -109,7 +106,7 @@ class _HomeLayoutEditorScreenState extends State<HomeLayoutEditorScreen> {
       body: ReorderableListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
         itemCount: _orderedSections.length,
-        onReorder: _onReorder,
+        onReorderItem: _onReorder,
         buildDefaultDragHandles: false,
         itemBuilder: (context, index) {
           final section = _orderedSections[index];

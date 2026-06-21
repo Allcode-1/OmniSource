@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../domain/entities/unified_content.dart';
@@ -142,7 +141,7 @@ class _ReleaseCalendarScreenState extends State<ReleaseCalendarScreen> {
             title: 'Release Calendar',
             subtitle: 'Timeline of releases with type filtering',
             infoLabel: 'See recent and upcoming drops grouped by month',
-            infoIcon: PhosphorIcons.calendarDots(PhosphorIconsStyle.regular),
+            infoIcon: Icons.calendar_month_outlined,
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 14)),
           SliverToBoxAdapter(
@@ -349,7 +348,7 @@ class _ReleaseThumb extends StatelessWidget {
       color: AppTheme.surfaceAlt,
       alignment: Alignment.center,
       child: Icon(
-        PhosphorIcons.calendarDots(PhosphorIconsStyle.light),
+        Icons.calendar_month_outlined,
         color: AppTheme.ink.withValues(alpha: 0.32),
         size: 22,
       ),

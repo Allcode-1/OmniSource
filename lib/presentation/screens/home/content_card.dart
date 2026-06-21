@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../domain/entities/unified_content.dart';
 import '../../../domain/repositories/analytics_repository.dart';
@@ -64,11 +63,9 @@ class ContentCard extends StatelessWidget {
                         top: 8,
                         right: 8,
                         child: _CircleAction(
-                          icon: PhosphorIcons.heart(
-                            isLiked
-                                ? PhosphorIconsStyle.fill
-                                : PhosphorIconsStyle.regular,
-                          ),
+                          icon: isLiked
+                              ? Icons.favorite
+                              : Icons.favorite_border,
                           iconColor: isLiked
                               ? const Color(0xFFFF6B7A)
                               : Colors.white,
@@ -177,11 +174,11 @@ class ContentCard extends StatelessWidget {
   IconData _getIconData(String? type) {
     switch (type) {
       case 'movie':
-        return PhosphorIcons.filmSlate(PhosphorIconsStyle.light);
+        return Icons.movie_outlined;
       case 'book':
-        return PhosphorIcons.bookOpenText(PhosphorIconsStyle.light);
+        return Icons.menu_book_outlined;
       default:
-        return PhosphorIcons.musicNote(PhosphorIconsStyle.light);
+        return Icons.music_note;
     }
   }
 }

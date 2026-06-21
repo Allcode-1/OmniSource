@@ -1,5 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -109,7 +108,7 @@ class OmniErrorState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OmniEmptyState(
-      icon: PhosphorIcons.warningCircle(PhosphorIconsStyle.light),
+      icon: CupertinoIcons.exclamationmark_triangle,
       title: 'Something went wrong',
       subtitle: message,
       actionLabel: onRetry == null ? null : 'Retry',

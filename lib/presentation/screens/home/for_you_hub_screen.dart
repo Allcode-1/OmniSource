@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/content_display.dart';
@@ -135,7 +134,7 @@ class _ForYouHubScreenState extends State<ForYouHubScreen> {
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: OmniEmptyState(
-                  icon: PhosphorIcons.sparkle(PhosphorIconsStyle.light),
+                  icon: Icons.auto_awesome,
                   title: 'No picks yet',
                   subtitle: 'Try another type or pull to refresh the feed.',
                 ),

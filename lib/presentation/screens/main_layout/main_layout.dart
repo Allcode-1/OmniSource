@@ -4,7 +4,6 @@ import 'package:omnisource/presentation/screens/deep_research/deep_research_scre
 import 'package:omnisource/presentation/screens/home/home_screen.dart';
 import 'package:omnisource/presentation/screens/library/library_screen.dart';
 import 'package:omnisource/presentation/screens/search/search_screen.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
@@ -24,26 +23,18 @@ class _MainLayoutState extends State<MainLayout> {
   ];
 
   static const _items = <_NavItem>[
+    _NavItem(icon: Icons.home_outlined, activeIcon: Icons.home, label: 'Home'),
     _NavItem(
-      icon: PhosphorIconsRegular.house,
-      activeIcon: PhosphorIconsFill.house,
-      label: 'Home',
-    ),
-    _NavItem(
-      icon: PhosphorIconsRegular.sparkle,
-      activeIcon: PhosphorIconsFill.sparkle,
+      icon: Icons.auto_awesome_outlined,
+      activeIcon: Icons.auto_awesome,
       label: 'Discover',
     ),
     _NavItem(
-      icon: PhosphorIconsRegular.stack,
-      activeIcon: PhosphorIconsFill.stack,
+      icon: Icons.library_books_outlined,
+      activeIcon: Icons.library_books,
       label: 'Library',
     ),
-    _NavItem(
-      icon: PhosphorIconsRegular.magnifyingGlass,
-      activeIcon: PhosphorIconsBold.magnifyingGlass,
-      label: 'Search',
-    ),
+    _NavItem(icon: Icons.search, activeIcon: Icons.search, label: 'Search'),
   ];
 
   @override

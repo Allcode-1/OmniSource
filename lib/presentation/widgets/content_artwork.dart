@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../domain/entities/unified_content.dart';
@@ -126,9 +125,9 @@ class _ArtworkFallback extends StatelessWidget {
   IconData _icon(String type) {
     switch (type) {
       case 'movie':
-        return PhosphorIcons.filmSlate(PhosphorIconsStyle.light);
+        return Icons.movie_outlined;
       case 'book':
-        return PhosphorIcons.bookOpenText(PhosphorIconsStyle.light);
+        return Icons.menu_book_outlined;
       default:
         return CupertinoIcons.music_note;
     }

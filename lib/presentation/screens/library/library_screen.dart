@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:omnisource/data/models/playlist_model.dart';
 import 'package:omnisource/domain/entities/unified_content.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/utils/content_display.dart';
 import '../../../core/theme/app_theme.dart';
@@ -379,7 +378,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           child: SizedBox(
             height: 230,
             child: OmniEmptyState(
-              icon: PhosphorIcons.heart(PhosphorIconsStyle.light),
+              icon: Icons.favorite_border,
               title: 'No favorites yet',
               subtitle: 'Liked movies, songs, and books will appear here.',
             ),

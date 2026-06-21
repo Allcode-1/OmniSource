@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/content_display.dart';
@@ -135,7 +134,7 @@ class _TrendingHubScreenState extends State<TrendingHubScreen> {
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: OmniEmptyState(
-                  icon: PhosphorIcons.trendUp(PhosphorIconsStyle.light),
+                  icon: Icons.trending_up,
                   title: 'Nothing trending yet',
                   subtitle: 'Pull to refresh or switch the content type.',
                 ),

@@ -4,7 +4,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -99,7 +98,7 @@ class _DetailScreenState extends State<DetailScreen>
       'artist_name': content.artistName,
       'preview_url': content.previewUrl,
       'external_url': content.externalUrl,
-      if (extra != null) ...extra,
+      ...?extra,
     }..removeWhere((_, value) => value == null);
   }
 
@@ -297,11 +296,11 @@ class _DetailScreenState extends State<DetailScreen>
   IconData _iconByType(String type) {
     switch (type) {
       case 'movie':
-        return PhosphorIcons.filmSlate();
+        return Icons.movie_outlined;
       case 'book':
-        return PhosphorIcons.bookOpen();
+        return Icons.menu_book_outlined;
       default:
-        return PhosphorIcons.musicNote();
+        return Icons.music_note;
     }
   }
 
@@ -501,13 +500,21 @@ class _DetailScreenState extends State<DetailScreen>
     if (preview.contentType == 'music' &&
         preview.previewType == 'external' &&
         preview.provider == 'YouTube') {
-      await _trackPreviewEvent('external_open', preview, source: 'youtube_search');
+      await _trackPreviewEvent(
+        'external_open',
+        preview,
+        source: 'youtube_search',
+      );
       await _openUrl(preview.url, fallbackMessage: 'YouTube link copied');
       return;
     }
 
     if (preview.contentType == 'book') {
-      await _trackPreviewEvent('external_open', preview, source: 'book_preview');
+      await _trackPreviewEvent(
+        'external_open',
+        preview,
+        source: 'book_preview',
+      );
       await _openUrl(preview.url, fallbackMessage: 'Book preview link copied');
       return;
     }
@@ -666,11 +673,9 @@ class _DetailScreenState extends State<DetailScreen>
                         ),
                         const Spacer(),
                         _RoundIconButton(
-                          icon: PhosphorIcons.heart(
-                            isLiked
-                                ? PhosphorIconsStyle.fill
-                                : PhosphorIconsStyle.regular,
-                          ),
+                          icon: isLiked
+                              ? Icons.favorite
+                              : Icons.favorite_border,
                           color: isLiked
                               ? const Color(0xFFFF5D73)
                               : AppTheme.ink,
@@ -997,9 +1002,9 @@ class _DetailScreenState extends State<DetailScreen>
         ),
         const SizedBox(height: 10),
         _SignalRow(icon: _iconByType(content.type), text: 'Content type'),
-        _SignalRow(icon: PhosphorIcons.star(), text: 'Rating pattern'),
-        _SignalRow(icon: PhosphorIcons.clock(), text: 'Recent behavior'),
-        _SignalRow(icon: PhosphorIcons.sparkle(), text: 'Genre similarity'),
+        const _SignalRow(icon: Icons.star_outline, text: 'Rating pattern'),
+        const _SignalRow(icon: Icons.schedule, text: 'Recent behavior'),
+        const _SignalRow(icon: Icons.auto_awesome, text: 'Genre similarity'),
       ],
     );
   }

@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../domain/repositories/auth_repository.dart';
@@ -516,7 +515,7 @@ class _SubtleNotice extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            PhosphorIcons.info(PhosphorIconsStyle.regular),
+            Icons.info_outline,
             color: AppTheme.ink.withValues(alpha: 0.58),
             size: 17,
           ),
@@ -576,7 +575,7 @@ class _EmptyInterests extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              PhosphorIcons.magnifyingGlass(PhosphorIconsStyle.light),
+              Icons.search,
               color: AppTheme.ink.withValues(alpha: 0.36),
               size: 34,
             ),
