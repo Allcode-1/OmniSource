@@ -7,7 +7,9 @@ from app.api.routers import content as content_router
 
 
 class _FakeResponse:
-    def __init__(self, status_code: int, content: bytes = b"", headers=None, text: str = ""):
+    def __init__(
+        self, status_code: int, content: bytes = b"", headers=None, text: str = ""
+    ):
         self.status_code = status_code
         self.content = content
         self.headers = headers or {}
@@ -28,6 +30,23 @@ class _FakeAsyncClient:
         if isinstance(self._response_or_exc, Exception):
             raise self._response_or_exc
         return self._response_or_exc
+
+
+class _SequencedAsyncClient:
+    def __init__(self, responses):
+        self._responses = responses
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def get(self, url, *args, **kwargs):
+        response_or_exc = self._responses[url]
+        if isinstance(response_or_exc, Exception):
+            raise response_or_exc
+        return response_or_exc
 
 
 @pytest.mark.asyncio
@@ -71,6 +90,43 @@ async def test_fetch_image_raises_502_on_network_error(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_fetch_image_uses_tmdb_fallback_after_direct_failure(monkeypatch) -> None:
+    source_url = "https://image.tmdb.org/t/p/w500/x.jpg"
+    fallback_url = content_router._tmdb_fallback_url(source_url)
+    assert fallback_url is not None
+
+    responses = {
+        source_url: RuntimeError("tmdb cdn unavailable"),
+        fallback_url: _FakeResponse(
+            200,
+            content=b"fallback-image",
+            headers={"content-type": "image/jpeg"},
+        ),
+    }
+    monkeypatch.setattr(
+        content_router.httpx,
+        "AsyncClient",
+        lambda **kwargs: _SequencedAsyncClient(responses),
+    )
+
+    content, media_type = await content_router._fetch_image(source_url)
+
+    assert content == b"fallback-image"
+    assert media_type == "image/jpeg"
+
+
+def test_tmdb_fallback_is_internal_only() -> None:
+    fallback_url = content_router._tmdb_fallback_url(
+        "https://image.tmdb.org/t/p/w500/x.jpg",
+    )
+    assert fallback_url is not None
+
+    with pytest.raises(HTTPException) as error:
+        content_router._validate_image_url(fallback_url)
+    assert error.value.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_fetch_image_raises_502_on_non_200_status(monkeypatch) -> None:
     monkeypatch.setattr(
         content_router.httpx,
@@ -85,7 +141,9 @@ async def test_fetch_image_raises_502_on_non_200_status(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_image_raises_400_for_non_image_content_type(monkeypatch) -> None:
-    response = _FakeResponse(200, content=b"{}", headers={"content-type": "application/json"})
+    response = _FakeResponse(
+        200, content=b"{}", headers={"content-type": "application/json"}
+    )
     monkeypatch.setattr(
         content_router.httpx,
         "AsyncClient",

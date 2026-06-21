@@ -6,29 +6,29 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+
 class TMDBClient:
     def __init__(self):
         self.api_key = settings.TMDB_API_KEY
         self.base_url = "https://api.themoviedb.org/3"
         self.headers = {
             "accept": "application/json",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
-
-        proxy = settings.SPOTIFY_PROXY_URL
 
         if self.api_key and len(self.api_key) > 50:
             self.headers["Authorization"] = f"Bearer {self.api_key}"
 
         self._client = httpx.AsyncClient(
-            proxy=proxy,
             timeout=httpx.Timeout(10.0, connect=3.0, read=10.0),
             limits=httpx.Limits(max_connections=30, max_keepalive_connections=15),
         )
 
-    async def _make_request(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _make_request(
+        self, endpoint: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
         default_params = {"language": "en-US"}
-        
+
         if self.api_key and len(self.api_key) <= 50:
             default_params["api_key"] = self.api_key
 
@@ -61,7 +61,9 @@ class TMDBClient:
                     await asyncio.sleep(0.3 * (attempt + 1))
                     continue
                 message = str(exc).strip() or type(exc).__name__
-                logger.warning("TMDB request failed endpoint=%s error=%s", endpoint, message)
+                logger.warning(
+                    "TMDB request failed endpoint=%s error=%s", endpoint, message
+                )
 
         return {"results": []}
 
@@ -110,5 +112,6 @@ class TMDBClient:
 
     async def close(self) -> None:
         await self._client.aclose()
+
 
 tmdb_client = TMDBClient()

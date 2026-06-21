@@ -1,6 +1,6 @@
 import asyncio
 import time
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -27,6 +27,10 @@ _ALLOWED_IMAGE_HOSTS = {
     "books.googleusercontent.com",
     "lh3.googleusercontent.com",
     "placehold.co",
+}
+_INTERNAL_IMAGE_FALLBACK_HOSTS = {
+    "wsrv.nl",
+    "images.weserv.nl",
 }
 _IMAGE_CACHE_TTL_SECONDS = settings.IMAGE_PROXY_CACHE_TTL_SECONDS
 _IMAGE_CACHE_MAX_ITEMS = settings.IMAGE_PROXY_CACHE_MAX_ITEMS
@@ -92,74 +96,139 @@ async def _write_cached_image(url: str, content: bytes, content_type: str) -> No
         _image_cache_total_bytes += content_size
 
 
-def _validate_image_url(raw_url: str) -> str:
+def _validate_image_url(
+    raw_url: str,
+    *,
+    allowed_hosts: set[str] | None = None,
+) -> str:
     parsed = urlparse(raw_url)
     host = (parsed.hostname or "").lower()
     if parsed.scheme not in {"http", "https"} or not host:
         raise HTTPException(status_code=400, detail="Invalid image URL")
-    if host not in _ALLOWED_IMAGE_HOSTS and not host.endswith(".googleusercontent.com"):
+    hosts = allowed_hosts or _ALLOWED_IMAGE_HOSTS
+    if host not in hosts and not host.endswith(".googleusercontent.com"):
         raise HTTPException(status_code=400, detail="Image host is not allowed")
     return raw_url
 
 
-async def _fetch_image(url: str) -> tuple[bytes, str]:
-    current_url = _validate_image_url(url)
-    try:
-        async with httpx.AsyncClient(timeout=8.0, follow_redirects=False) as client:
-            for _ in range(_MAX_IMAGE_REDIRECTS + 1):
-                upstream = await client.get(
-                    current_url,
-                    headers={"User-Agent": "OmniSource/1.0"},
-                )
-                status = upstream.status_code
-                if status in (301, 302, 303, 307, 308):
-                    location = upstream.headers.get("location")
-                    if not location:
-                        raise HTTPException(status_code=502, detail="Invalid redirect response")
-                    current_url = _validate_image_url(urljoin(current_url, location))
-                    continue
+def _tmdb_fallback_url(url: str) -> str | None:
+    parsed = urlparse(url)
+    if (parsed.hostname or "").lower() != "image.tmdb.org":
+        return None
 
-                if status != 200:
-                    logger.warning(
-                        "Image proxy upstream status=%s url=%s",
-                        status,
-                        current_url,
+    source = f"image.tmdb.org{parsed.path}"
+    if parsed.query:
+        source = f"{source}?{parsed.query}"
+    return f"https://wsrv.nl/?{urlencode({'url': source})}"
+
+
+async def _fetch_image_candidate(
+    url: str,
+    *,
+    allowed_hosts: set[str],
+) -> tuple[bytes, str]:
+    current_url = _validate_image_url(url, allowed_hosts=allowed_hosts)
+    async with httpx.AsyncClient(timeout=8.0, follow_redirects=False) as client:
+        for _ in range(_MAX_IMAGE_REDIRECTS + 1):
+            upstream = await client.get(
+                current_url,
+                headers={"User-Agent": "OmniSource/1.0"},
+            )
+            status = upstream.status_code
+            if status in (301, 302, 303, 307, 308):
+                location = upstream.headers.get("location")
+                if not location:
+                    raise HTTPException(
+                        status_code=502, detail="Invalid redirect response"
                     )
-                    raise HTTPException(status_code=502, detail="Unable to fetch image")
-
-                content_type = (
-                    (upstream.headers.get("content-type") or "image/jpeg")
-                    .split(";")[0]
-                    .strip()
+                current_url = _validate_image_url(
+                    urljoin(current_url, location),
+                    allowed_hosts=allowed_hosts,
                 )
-                if not content_type.startswith("image/"):
-                    raise HTTPException(status_code=400, detail="URL does not point to an image")
+                continue
 
-                header_length = upstream.headers.get("content-length")
-                if header_length and header_length.isdigit() and int(header_length) > _IMAGE_MAX_BYTES:
-                    raise HTTPException(status_code=413, detail="Image is too large")
+            if status != 200:
+                raise HTTPException(status_code=502, detail="Unable to fetch image")
 
-                content = upstream.content
-                if len(content) > _IMAGE_MAX_BYTES:
-                    raise HTTPException(status_code=413, detail="Image is too large")
-                return content, content_type
-            raise HTTPException(status_code=502, detail="Too many redirects")
-    except Exception as exc:
-        if isinstance(exc, HTTPException):
-            raise
-        logger.warning("Image proxy fetch failed url=%s error=%s", url, type(exc).__name__)
-        raise HTTPException(status_code=502, detail="Unable to fetch image")
+            content_type = (
+                (upstream.headers.get("content-type") or "image/jpeg")
+                .split(";")[0]
+                .strip()
+            )
+            if not content_type.startswith("image/"):
+                raise HTTPException(
+                    status_code=400, detail="URL does not point to an image"
+                )
+
+            header_length = upstream.headers.get("content-length")
+            if (
+                header_length
+                and header_length.isdigit()
+                and int(header_length) > _IMAGE_MAX_BYTES
+            ):
+                raise HTTPException(status_code=413, detail="Image is too large")
+
+            content = upstream.content
+            if len(content) > _IMAGE_MAX_BYTES:
+                raise HTTPException(status_code=413, detail="Image is too large")
+            return content, content_type
+        raise HTTPException(status_code=502, detail="Too many redirects")
+
+
+async def _fetch_image(url: str) -> tuple[bytes, str]:
+    _validate_image_url(url)
+    try:
+        return await _fetch_image_candidate(url, allowed_hosts=_ALLOWED_IMAGE_HOSTS)
+    except Exception as direct_exc:
+        fallback_url = _tmdb_fallback_url(url)
+        if fallback_url is None:
+            if isinstance(direct_exc, HTTPException):
+                raise direct_exc
+            logger.warning(
+                "Image proxy fetch failed host=%s error=%s message=%s",
+                urlparse(url).hostname,
+                type(direct_exc).__name__,
+                str(direct_exc)[:200],
+            )
+            raise HTTPException(
+                status_code=502, detail="Unable to fetch image"
+            ) from direct_exc
+
+        logger.warning(
+            "TMDB image direct fetch failed; trying fallback error=%s message=%s",
+            type(direct_exc).__name__,
+            str(direct_exc)[:200],
+        )
+        try:
+            content, content_type = await _fetch_image_candidate(
+                fallback_url,
+                allowed_hosts=_INTERNAL_IMAGE_FALLBACK_HOSTS,
+            )
+            logger.info("TMDB image fallback succeeded")
+            return content, content_type
+        except Exception as fallback_exc:
+            logger.warning(
+                "TMDB image fallback failed error=%s message=%s",
+                type(fallback_exc).__name__,
+                str(fallback_exc)[:200],
+            )
+            if isinstance(direct_exc, HTTPException):
+                raise direct_exc
+            raise HTTPException(
+                status_code=502,
+                detail="Unable to fetch image",
+            ) from fallback_exc
+
 
 @router.get("/search", response_model=List[UnifiedContent])
-async def search(
-    query: str = Query(..., min_length=2),
-    type: str = Query("all") 
-):
+async def search(query: str = Query(..., min_length=2), type: str = Query("all")):
     return await service.get_unified_search(query, type)
+
 
 @router.get("/home")
 async def home(type: str = Query("all")):
     return await service.get_home_data(type)
+
 
 @router.get("/discover", response_model=List[UnifiedContent])
 async def discover(tag: str = Query(...), type: str = Query("all")):
@@ -212,20 +281,21 @@ async def image_proxy(url: str = Query(..., min_length=8, max_length=1500)):
         headers={"Cache-Control": "public, max-age=86400"},
     )
 
+
 @router.get("/trending", response_model=List[UnifiedContent])
 async def trending(type: str = Query("all")):
     data = await service.get_home_data(type)
     all_items = []
     for category_list in data.values():
         all_items.extend(category_list)
-    
+
     unique_items = {
-        f"{item.type}:{item.external_id}": item
-        for item in all_items
+        f"{item.type}:{item.external_id}": item for item in all_items
     }.values()
     result = list(unique_items)
-    
+
     return sorted(result, key=lambda x: getattr(x, "rating", 0) or 0, reverse=True)
+
 
 @router.get("/recommendations", response_model=List[UnifiedContent])
 async def recommendations(

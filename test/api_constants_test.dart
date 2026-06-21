@@ -28,5 +28,13 @@ void main() {
       expect(resolved, contains('/content/image-proxy?url='));
       expect(resolved, startsWith(ApiConstants.baseUrl));
     });
+
+    test('unwraps an image proxy url back to the original source', () {
+      const original = 'https://image.tmdb.org/t/p/w500/a.jpg';
+      final proxied = ApiConstants.resolveImageUrl(original);
+
+      expect(ApiConstants.unwrapImageProxyUrl(proxied), original);
+      expect(ApiConstants.unwrapImageProxyUrl(original), original);
+    });
   });
 }

@@ -1,4 +1,5 @@
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
@@ -6,10 +7,11 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-def send_reset_password_email(email_to: str, token: str):
+
+def send_reset_password_email(email_to: str, token: str) -> None:
     subject = f"Password reset for {settings.PROJECT_NAME}"
-    link = f"omnisource://reset-password?token={token}" 
-    
+    link = f"omnisource://reset-password?token={token}"
+
     html_content = f"""
     <html>
         <head>
@@ -89,7 +91,7 @@ def send_reset_password_email(email_to: str, token: str):
         </body>
     </html>
     """
-    
+
     message = MIMEMultipart()
     message["From"] = settings.EMAILS_FROM_EMAIL
     message["To"] = email_to
@@ -97,9 +99,17 @@ def send_reset_password_email(email_to: str, token: str):
     message.attach(MIMEText(html_content, "html"))
 
     try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-            server.starttls() 
+        with smtplib.SMTP(
+            settings.SMTP_HOST,
+            settings.SMTP_PORT,
+            timeout=15,
+        ) as server:
+            server.ehlo()
+            server.starttls(context=ssl.create_default_context())
+            server.ehlo()
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.sendmail(settings.EMAILS_FROM_EMAIL, email_to, message.as_string())
+            server.send_message(message)
+        logger.info("Password reset email sent to %s", email_to)
     except Exception as e:
         logger.exception("Error sending reset email to %s: %s", email_to, e)
+        raise

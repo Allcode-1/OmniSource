@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../core/constants/api_constants.dart';
+
 class OmniCachedImage extends StatelessWidget {
   final String imageUrl;
   final BoxFit fit;
@@ -23,6 +25,7 @@ class OmniCachedImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = imageUrl.trim();
     if (url.isEmpty) return fallback;
+    final originalUrl = ApiConstants.unwrapImageProxyUrl(url);
     return CachedNetworkImage(
       imageUrl: url,
       fit: fit,
@@ -30,7 +33,18 @@ class OmniCachedImage extends StatelessWidget {
       memCacheWidth: memCacheWidth,
       memCacheHeight: memCacheHeight,
       placeholder: (context, url) => fallback,
-      errorWidget: (context, url, error) => fallback,
+      errorWidget: (context, url, error) {
+        if (originalUrl == url || originalUrl.isEmpty) return fallback;
+        return CachedNetworkImage(
+          imageUrl: originalUrl,
+          fit: fit,
+          fadeInDuration: fadeInDuration,
+          memCacheWidth: memCacheWidth,
+          memCacheHeight: memCacheHeight,
+          placeholder: (context, url) => fallback,
+          errorWidget: (context, url, error) => fallback,
+        );
+      },
     );
   }
 }

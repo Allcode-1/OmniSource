@@ -62,4 +62,14 @@ class ApiConstants {
     if (value.contains('/content/image-proxy?url=')) return value;
     return '$baseUrl/content/image-proxy?url=${Uri.encodeQueryComponent(value)}';
   }
+
+  static String unwrapImageProxyUrl(String imageUrl) {
+    final value = imageUrl.trim();
+    final uri = Uri.tryParse(value);
+    if (uri == null || !uri.path.endsWith('/content/image-proxy')) {
+      return value;
+    }
+    final original = uri.queryParameters['url']?.trim();
+    return original == null || original.isEmpty ? value : original;
+  }
 }

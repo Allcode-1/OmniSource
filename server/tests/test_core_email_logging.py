@@ -2,14 +2,18 @@ import json
 import logging
 import sys
 
+import pytest
+
 from app.core import email as email_module
 from app.core import logging as logging_module
 
 
 class _FakeSMTP:
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, host: str, port: int, timeout: int | None = None) -> None:
         self.host = host
         self.port = port
+        self.timeout = timeout
+        self.ehlo_calls = 0
         self.started_tls = False
         self.logged_in = None
         self.sent = None
@@ -20,36 +24,41 @@ class _FakeSMTP:
     def __exit__(self, exc_type, exc, tb):
         return False
 
-    def starttls(self) -> None:
+    def ehlo(self):
+        self.ehlo_calls += 1
+
+    def starttls(self, context=None) -> None:
         self.started_tls = True
 
     def login(self, user: str, password: str) -> None:
         self.logged_in = (user, password)
 
-    def sendmail(self, sender: str, recipient: str, message: str) -> None:
-        self.sent = (sender, recipient, message)
+    def send_message(self, message) -> None:
+        self.sent = message
 
 
 def test_send_reset_password_email_uses_smtp(monkeypatch) -> None:
     fake_smtp = _FakeSMTP("smtp.test", 2525)
 
-    def fake_smtp_factory(host: str, port: int):
+    def fake_smtp_factory(host: str, port: int, timeout: int):
         assert host == email_module.settings.SMTP_HOST
         assert port == email_module.settings.SMTP_PORT
+        assert timeout == 15
         return fake_smtp
 
     monkeypatch.setattr(email_module.smtplib, "SMTP", fake_smtp_factory)
     email_module.send_reset_password_email("user@test.dev", "abc-token")
 
     assert fake_smtp.started_tls is True
+    assert fake_smtp.ehlo_calls == 2
     assert fake_smtp.logged_in == (
         email_module.settings.SMTP_USER,
         email_module.settings.SMTP_PASSWORD,
     )
     assert fake_smtp.sent is not None
-    assert fake_smtp.sent[0] == email_module.settings.EMAILS_FROM_EMAIL
-    assert fake_smtp.sent[1] == "user@test.dev"
-    assert "abc-token" in fake_smtp.sent[2]
+    assert fake_smtp.sent["From"] == email_module.settings.EMAILS_FROM_EMAIL
+    assert fake_smtp.sent["To"] == "user@test.dev"
+    assert "abc-token" in fake_smtp.sent.as_string()
 
 
 def test_send_reset_password_email_logs_exception_on_failure(monkeypatch) -> None:
@@ -63,7 +72,10 @@ def test_send_reset_password_email_logs_exception_on_failure(monkeypatch) -> Non
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def starttls(self) -> None:
+        def ehlo(self):
+            return None
+
+        def starttls(self, context=None) -> None:
             raise RuntimeError("smtp failed")
 
     captured = {"called": False}
@@ -75,7 +87,8 @@ def test_send_reset_password_email_logs_exception_on_failure(monkeypatch) -> Non
     monkeypatch.setattr(email_module.smtplib, "SMTP", _BrokenSMTP)
     monkeypatch.setattr(email_module.logger, "exception", fake_exception)
 
-    email_module.send_reset_password_email("user@test.dev", "abc-token")
+    with pytest.raises(RuntimeError, match="smtp failed"):
+        email_module.send_reset_password_email("user@test.dev", "abc-token")
     assert captured["called"] is True
 
 
