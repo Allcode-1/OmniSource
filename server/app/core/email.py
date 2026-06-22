@@ -1,4 +1,5 @@
 import smtplib
+import socket
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -6,6 +7,41 @@ from app.core.config import settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+class _IPv4SMTP(smtplib.SMTP):
+    def _get_socket(self, host: str, port: int, timeout: float | None):
+        addresses = socket.getaddrinfo(
+            host,
+            port,
+            family=socket.AF_INET,
+            type=socket.SOCK_STREAM,
+        )
+        last_error: OSError | None = None
+        for family, socktype, proto, _, sockaddr in addresses:
+            connection = socket.socket(family, socktype, proto)
+            try:
+                connection.settimeout(timeout)
+                if self.source_address:
+                    connection.bind(self.source_address)
+                connection.connect(sockaddr)
+                return connection
+            except OSError as exc:
+                last_error = exc
+                connection.close()
+
+        if last_error is not None:
+            raise last_error
+        raise OSError(f"No IPv4 address found for SMTP host {host}")
+
+
+def _create_smtp_client():
+    smtp_class = _IPv4SMTP if settings.SMTP_FORCE_IPV4 else smtplib.SMTP
+    return smtp_class(
+        settings.SMTP_HOST,
+        settings.SMTP_PORT,
+        timeout=15,
+    )
 
 
 def send_reset_password_email(email_to: str, token: str) -> None:
@@ -99,11 +135,7 @@ def send_reset_password_email(email_to: str, token: str) -> None:
     message.attach(MIMEText(html_content, "html"))
 
     try:
-        with smtplib.SMTP(
-            settings.SMTP_HOST,
-            settings.SMTP_PORT,
-            timeout=15,
-        ) as server:
+        with _create_smtp_client() as server:
             server.ehlo()
             server.starttls(context=ssl.create_default_context())
             server.ehlo()

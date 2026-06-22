@@ -40,13 +40,10 @@ class _FakeSMTP:
 def test_send_reset_password_email_uses_smtp(monkeypatch) -> None:
     fake_smtp = _FakeSMTP("smtp.test", 2525)
 
-    def fake_smtp_factory(host: str, port: int, timeout: int):
-        assert host == email_module.settings.SMTP_HOST
-        assert port == email_module.settings.SMTP_PORT
-        assert timeout == 15
+    def fake_smtp_factory():
         return fake_smtp
 
-    monkeypatch.setattr(email_module.smtplib, "SMTP", fake_smtp_factory)
+    monkeypatch.setattr(email_module, "_create_smtp_client", fake_smtp_factory)
     email_module.send_reset_password_email("user@test.dev", "abc-token")
 
     assert fake_smtp.started_tls is True
@@ -84,12 +81,32 @@ def test_send_reset_password_email_logs_exception_on_failure(monkeypatch) -> Non
         captured["called"] = True
         assert "Error sending reset email" in message
 
-    monkeypatch.setattr(email_module.smtplib, "SMTP", _BrokenSMTP)
+    monkeypatch.setattr(email_module, "_create_smtp_client", _BrokenSMTP)
     monkeypatch.setattr(email_module.logger, "exception", fake_exception)
 
     with pytest.raises(RuntimeError, match="smtp failed"):
         email_module.send_reset_password_email("user@test.dev", "abc-token")
     assert captured["called"] is True
+
+
+def test_create_smtp_client_prefers_ipv4(monkeypatch) -> None:
+    captured = {}
+
+    class _FakeIPv4SMTP:
+        def __init__(self, host: str, port: int, timeout: int) -> None:
+            captured.update(host=host, port=port, timeout=timeout)
+
+    monkeypatch.setattr(email_module, "_IPv4SMTP", _FakeIPv4SMTP)
+    monkeypatch.setattr(email_module.settings, "SMTP_FORCE_IPV4", True)
+
+    client = email_module._create_smtp_client()
+
+    assert isinstance(client, _FakeIPv4SMTP)
+    assert captured == {
+        "host": email_module.settings.SMTP_HOST,
+        "port": email_module.settings.SMTP_PORT,
+        "timeout": 15,
+    }
 
 
 def test_json_formatter_renders_extra_fields_and_exception() -> None:

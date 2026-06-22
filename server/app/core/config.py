@@ -2,6 +2,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     PROJECT_NAME: str
     MONGODB_URL: str
@@ -64,6 +65,7 @@ class Settings(BaseSettings):
 
     SMTP_HOST: str
     SMTP_PORT: int
+    SMTP_FORCE_IPV4: bool = True
     SMTP_USER: str
     SMTP_PASSWORD: str
     EMAILS_FROM_EMAIL: str
@@ -76,7 +78,7 @@ class Settings(BaseSettings):
         "rapeman",
     ]
     STOP_WORDS_SUBTITLES: list[str] = ["dream supplier"]
-    
+
     TMDB_API_KEY: str
     SPOTIFY_CLIENT_ID: str
     SPOTIFY_CLIENT_SECRET: str
@@ -84,5 +86,6 @@ class Settings(BaseSettings):
     GOOGLE_BOOKS_API_KEY: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
 
 settings = Settings()
