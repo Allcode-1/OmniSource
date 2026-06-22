@@ -21,8 +21,7 @@ RUN apt-get update \
 
 COPY pyproject.toml uv.lock ./
 
-RUN UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu \
-    uv sync --frozen --no-dev --extra semantic --no-install-project \
+RUN uv sync --frozen --no-dev --extra semantic --no-install-project \
     && uv cache clean
 
 
